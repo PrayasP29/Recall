@@ -1,4 +1,5 @@
 // Pure tracking logic — no DOM, no chrome.* — so it can be unit tested with node:test.
+import { initialDueDay } from './revisionScheduler.js'
 
 // Verdict strings observed in LeetCode's submission result panel
 // (evidence: LeetUp extension uses this exact-text approach).
@@ -54,15 +55,17 @@ export function upsertProblem(existing, event) {
       firstSolvedAt: at,
       lastAcceptedAt: at,
       revisionHistory: [],
-      // ponytail: null until Feature B's scheduler exists; it will compute due dates.
-      nextRevisionAt: null,
+      // First revision is due the next calendar day (local day of the solve).
+      nextRevisionAt: initialDueDay(at),
     }
   }
   const lastAcceptedAt = existing.lastAcceptedAt > at ? existing.lastAcceptedAt : at
   return {
-    ...existing,
+    ...existing, // preserves revisionHistory and any existing revision schedule
     title: existing.title ?? event.title ?? null,
     difficulty: existing.difficulty ?? event.difficulty ?? null,
     lastAcceptedAt,
+    // Legacy records (nextRevisionAt null) get scheduled from firstSolvedAt.
+    nextRevisionAt: existing.nextRevisionAt ?? initialDueDay(existing.firstSolvedAt),
   }
 }
