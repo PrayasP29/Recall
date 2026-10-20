@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Recall - LeetCode Revision Tracker",
+  "version": "1.0.0",
+  "description": "Tracks accepted LeetCode submissions and reminds you to revise previously solved problems.",
+  "action": {
+    "default_popup": "index.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://leetcode.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["storage"],
+  "host_permissions": ["https://leetcode.com/*"]
+}
