@@ -5,20 +5,7 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   base: './',
   plugins: [react()],
-  build: {
-    rollupOptions: {
-      input: {
-        main: 'index.html',
-        content: 'src/content.js',
-      },
-      output: {
-        // content.js must keep a stable name: manifest.json references it,
-        // and it must stay free of import statements (content scripts are
-        // classic scripts, not modules). Only rename assets/* chunks here
-        // if a future shared chunk would split content.js off its imports.
-        entryFileNames: (chunk) =>
-          chunk.name === 'content' ? 'content.js' : 'assets/[name]-[hash].js',
-      },
-    },
-  },
+  // The content script is built separately by vite.content.config.js as a
+  // self-contained IIFE: it is a classic script (no import statements), so
+  // it must never share chunks with this build.
 })

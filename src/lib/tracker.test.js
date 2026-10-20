@@ -8,6 +8,10 @@ import {
   upsertProblem,
 } from './tracker.js'
 
+// Timestamps are built from LOCAL date components so tests are deterministic
+// in any machine timezone (toLocalDay round-trips to the same calendar day).
+const iso = (y, m, d, h = 12) => new Date(y, m - 1, d, h).toISOString()
+
 test('Accepted result is recognized', () => {
   assert.equal(classifyVerdict('Accepted'), 'accepted')
   assert.equal(classifyVerdict('  Accepted \n'), 'accepted')
@@ -60,43 +64,59 @@ const ev = (over = {}) => ({
   url: normalizeProblemUrl('two-sum'),
   title: 'Two Sum',
   difficulty: 'Easy',
-  at: '2026-10-20T10:00:00.000Z',
+  at: iso(2026, 10, 20),
   ...over,
 })
 
-test('first accepted submission creates a complete record', () => {
+test('first accepted submission creates a complete record scheduled for tomorrow', () => {
   const rec = upsertProblem(undefined, ev())
   assert.deepEqual(rec, {
     problemId: 'two-sum',
     title: 'Two Sum',
     url: 'https://leetcode.com/problems/two-sum/',
     difficulty: 'Easy',
-    firstSolvedAt: '2026-10-20T10:00:00.000Z',
-    lastAcceptedAt: '2026-10-20T10:00:00.000Z',
+    firstSolvedAt: iso(2026, 10, 20),
+    lastAcceptedAt: iso(2026, 10, 20),
     revisionHistory: [],
-    nextRevisionAt: null,
+    nextRevisionAt: '2026-10-21', // following calendar day
   })
 })
 
 test('re-solving preserves firstSolvedAt and advances lastAcceptedAt', () => {
   const first = upsertProblem(undefined, ev())
-  const again = upsertProblem(first, ev({ at: '2026-10-25T08:00:00.000Z' }))
-  assert.equal(again.firstSolvedAt, '2026-10-20T10:00:00.000Z')
-  assert.equal(again.lastAcceptedAt, '2026-10-25T08:00:00.000Z')
+  const again = upsertProblem(first, ev({ at: iso(2026, 10, 25) }))
+  assert.equal(again.firstSolvedAt, iso(2026, 10, 20))
+  assert.equal(again.lastAcceptedAt, iso(2026, 10, 25))
 })
 
 test('duplicate/replayed events never move lastAcceptedAt backwards or duplicate records', () => {
   const first = upsertProblem(undefined, ev())
-  const replay = upsertProblem(first, ev({ at: '2026-10-19T00:00:00.000Z' })) // older timestamp
-  assert.equal(replay.lastAcceptedAt, '2026-10-20T10:00:00.000Z')
+  const replay = upsertProblem(first, ev({ at: iso(2026, 10, 19) })) // older timestamp
+  assert.equal(replay.lastAcceptedAt, iso(2026, 10, 20))
   assert.equal(replay.problemId, first.problemId) // one record per problemId
 })
 
 test('missing metadata is backfilled by later sightings', () => {
   const sparse = upsertProblem(undefined, ev({ title: null, difficulty: null }))
   assert.equal(sparse.title, null)
-  const filled = upsertProblem(sparse, ev({ at: '2026-10-21T00:00:00.000Z' }))
+  const filled = upsertProblem(sparse, ev({ at: iso(2026, 10, 21) }))
   assert.equal(filled.title, 'Two Sum')
   assert.equal(filled.difficulty, 'Easy')
-  assert.equal(filled.firstSolvedAt, '2026-10-20T10:00:00.000Z')
+  assert.equal(filled.firstSolvedAt, iso(2026, 10, 20))
+})
+
+test('re-solving preserves revision history and the revision schedule', () => {
+  const history = [
+    { reviewedAt: iso(2026, 10, 21, 9), result: 'remembered', nextRevisionAt: '2026-10-24' },
+  ]
+  const scheduled = { ...upsertProblem(undefined, ev()), revisionHistory: history, nextRevisionAt: '2026-10-24' }
+  const reSolved = upsertProblem(scheduled, ev({ at: iso(2026, 10, 26) }))
+  assert.deepEqual(reSolved.revisionHistory, history)
+  assert.equal(reSolved.nextRevisionAt, '2026-10-24') // accepted ≠ revision; schedule untouched
+})
+
+test('legacy record with null nextRevisionAt is scheduled from firstSolvedAt', () => {
+  const legacy = { ...upsertProblem(undefined, ev()), nextRevisionAt: null }
+  const migrated = upsertProblem(legacy, ev({ at: iso(2026, 11, 2) }))
+  assert.equal(migrated.nextRevisionAt, '2026-10-21') // from firstSolvedAt (Oct 20), not the re-solve
 })
