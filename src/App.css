@@ -38,16 +38,6 @@
   z-index: 1;
 }
 
-/* Glass surface helper used by panels and controls. */
-.glass {
-  background: var(--glass);
-  border: 1px solid var(--glass-border);
-  border-radius: 10px;
-  box-shadow: var(--glass-shadow);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
-}
-
 /* Brand lockup: the mark beside a stacked wordmark. "Recall" is the product
    name; the subtitle explains what it does. */
 header {
@@ -323,4 +313,3 @@ footer {
   opacity: 0.6;
   font-weight: 500;
 }
-

@@ -1,52 +1,51 @@
 # Contributing to Recall
 
-Thanks for helping! This project is small on purpose — keep it that way.
+Thanks for helping improve Recall. Small, focused changes are easier to review and safer for an extension that stores revision history locally.
 
-## Workflow
+## Set up a development checkout
 
-1. **Fork** the repository and clone your fork:
+1. Fork the repository on GitHub and clone your fork:
 
    ```bash
    git clone https://github.com/<your-username>/Recall.git
    cd Recall
    ```
 
-2. **Create a feature branch** from `main`. Never work on `main` directly:
+2. Install the locked dependency set:
 
    ```bash
-   git checkout -b feature/your-feature-name   # or fix/bug-name
+   npm ci
    ```
 
-3. **Install dependencies**:
+3. Create a feature branch from the latest `main`:
 
    ```bash
-   npm install
+   git switch -c feature/short-description
    ```
 
-4. **Make your change**, then verify everything before committing:
+## Run checks
 
-   ```bash
-   npm test
-   npm run lint
-   npm run build
-   ```
+Run the full local check set before opening a pull request:
 
-   All three must pass.
+```bash
+npm test
+npm run lint
+npm run build
+```
 
-5. **Commit** with a clear message, then push and open a **Pull Request**:
+Tests use Node's built-in `node:test` runner and live beside the pure logic modules in `src/lib/`. Add or update tests when changing tracking, importing, scheduling, or pattern-selection behavior. Load the generated `dist/` directory as an unpacked extension for manual popup or LeetCode testing when a change affects browser behavior.
 
-   ```bash
-   git push origin your-branch-name
-   ```
+## Pull requests
 
-## Pull request rules
+- Keep each pull request limited to one coherent topic.
+- Explain the behavior change and list the checks you ran.
+- Update the README or other documentation when user-visible behavior, permissions, installation, or privacy details change.
+- Do not add dependencies without a clear need.
+- Do not intentionally change revision scheduling semantics, daily pattern selection, import behavior, or Remembered/Forgotten intervals without updating the relevant tests and documentation.
+- Never commit secrets, `.env` files, `node_modules/`, generated `dist/`, or local backup files.
 
-- **One topic per PR.** No drive-by refactors, no unrelated formatting churn, no bundled feature + bugfix.
-- Describe *what* changed and *how you tested it* (the PR template walks you through it).
-- New behavior needs a test where it is practical (pure logic belongs in `src/lib/` so it can be unit-tested).
-- Do not add dependencies without a good reason — prefer the standard library.
-- Never commit secrets, `node_modules/`, or `dist/`.
+Push your branch and open a pull request targeting `main`. Use the repository pull request template and include manual browser-testing details when relevant.
 
-## Reporting bugs / requesting features
+## Issues and security
 
-Open an issue using the provided templates. For bugs: include exact steps, expected vs. actual behavior, and your Chrome/Node versions.
+Use the provided issue templates for bugs and feature requests. For security vulnerabilities, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
