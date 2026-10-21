@@ -24,6 +24,20 @@ const fmtDay = (day) => {
 
 const label = (rec) => rec.title || rec.problemId
 
+function syncText(sync) {
+  if (sync.status === 'idle') return ''
+  if (sync.status === 'running') {
+    const p = sync.progress
+    return p ? `Syncing page ${p.page} (${p.collected}/${p.total})...` : 'Syncing...'
+  }
+  if (sync.status === 'error') return sync.message
+  const s = sync.stats ?? { discovered: 0, added: 0, matched: 0, skipped: 0 }
+  const parts = [`${s.added} added`, `${s.matched} already tracked`]
+  if (s.skipped) parts.push(`${s.skipped} skipped`)
+  const head = sync.status === 'complete' ? 'Complete' : 'Partial import'
+  return `${head} - ${s.discovered} of ${sync.totalNum} found: ${parts.join(', ')}.`
+}
+
 function ProblemLink({ rec }) {
   return (
     <a className="open" href={rec.url} target="_blank" rel="noreferrer">
@@ -42,6 +56,16 @@ function App() {
   })
   const [selected, setSelected] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [sync, setSync] = useState({ status: 'idle' })
+
+  useEffect(() => {
+    const onMessage = (msg) => {
+      if (msg?.type !== 'RECALL_SYNC_PROGRESS') return
+      setSync((s) => (s.status === 'running' ? { ...s, progress: msg } : s))
+    }
+    chrome.runtime.onMessage.addListener(onMessage)
+    return () => chrome.runtime.onMessage.removeListener(onMessage)
+  }, [])
 
   useEffect(() => {
     chrome.storage.local.get('problems').then(({ problems: stored = {} } = {}) => {
@@ -92,6 +116,34 @@ function App() {
     })
   }
 
+  async function syncHistory() {
+    if (sync.status === 'running') return
+    setSync({ status: 'running' })
+    try {
+      const tabs = await chrome.tabs.query({ url: 'https://leetcode.com/*' })
+      const tab = tabs.find((t) => typeof t.id === 'number')
+      if (!tab) {
+        setSync({ status: 'error', message: 'Open leetcode.com in a tab first, then retry.' })
+        return
+      }
+      const res = await chrome.tabs.sendMessage(tab.id, { type: 'RECALL_SYNC_HISTORY' })
+      if (res?.status !== 'complete' && res?.status !== 'partial') {
+        setSync({
+          status: 'error',
+          message: res?.message ?? 'Sync failed. Reload the LeetCode tab and retry.',
+        })
+        return
+      }
+      if (res.problems) setProblems(res.problems)
+      setSync(res)
+    } catch {
+      setSync({
+        status: 'error',
+        message: 'Could not reach the LeetCode tab. Reload it and retry.',
+      })
+    }
+  }
+
   if (!problems) return <div className="app empty-state">Loading…</div>
 
   const firstWeekday = new Date(view.year, view.month, 1).getDay()
@@ -108,6 +160,13 @@ function App() {
         <h1>Recall</h1>
         <span className="subtitle">LeetCode revision tracker</span>
       </header>
+
+      <section className="sync">
+        <button type="button" className="btn" onClick={syncHistory} disabled={sync.status === 'running'}>
+          Sync LeetCode History
+        </button>
+        <span className={`sync-status${sync.status === 'error' ? ' error' : ''}`}>{syncText(sync)}</span>
+      </section>
 
       <section>
         <h2>Due today {due.length > 0 && <span className="count">{due.length}</span>}</h2>

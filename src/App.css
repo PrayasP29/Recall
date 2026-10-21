@@ -51,6 +51,21 @@ h2 {
   padding: 8px 0;
 }
 
+/* History sync — one row, existing button styling */
+.sync {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sync-status {
+  font-size: 11px;
+  color: var(--text);
+}
+.sync-status.error {
+  color: var(--forgotten);
+}
+
 /* Queue cards */
 .card {
   border: 1px solid var(--border);
