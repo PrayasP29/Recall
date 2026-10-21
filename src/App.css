@@ -48,22 +48,44 @@
   backdrop-filter: blur(14px);
 }
 
+/* Brand lockup: the mark beside a stacked wordmark. "Recall" is the product
+   name; the subtitle explains what it does. */
 header {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 9px;
+  border: 1px solid var(--glass-border);
+  object-fit: cover;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
 h1 {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.4px;
   color: var(--text-h);
   margin: 0;
 }
 
 .subtitle {
-  font-size: 11px;
-  color: var(--text);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.25;
+  color: var(--text-h);
 }
 
 section {
@@ -93,7 +115,8 @@ h2 {
   padding: 8px 0;
 }
 
-/* History sync — secondary action, muted button */
+/* History sync — the one deliberate action in the popup, so it gets a solid
+   crimson fill instead of another glass chip. Sync runs only on click. */
 .sync {
   flex-direction: row;
   align-items: center;
@@ -101,13 +124,17 @@ h2 {
   gap: 6px;
 }
 .sync .btn {
-  font-size: 11px;
-  padding: 3px 9px;
-  color: var(--accent);
-  border-color: var(--accent-border);
-  background: var(--glass-weak);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 14px;
+  color: #fff;
+  border-color: rgba(255, 77, 94, 0.55);
+  background: var(--accent-solid);
+  box-shadow: 0 2px 10px rgba(193, 18, 31, 0.35);
+}
+.sync .btn:hover:not(:disabled) {
+  background: var(--accent-solid-hover);
+  border-color: rgba(255, 77, 94, 0.8);
 }
 .sync-status {
   font-size: 11px;

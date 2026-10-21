@@ -8,6 +8,8 @@
   --accent: #ff4d5e;      /* restrained crimson */
   --accent-bg: rgba(255, 77, 94, 0.14);
   --accent-border: rgba(255, 77, 94, 0.45);
+  --accent-solid: #c1121f;        /* filled button surface; white text is 6.2:1 */
+  --accent-solid-hover: #d01423;
   --solved: #4ade80;
   --warning: #fbbf24;
   --forgotten: #f87171;
