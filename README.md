@@ -2,6 +2,20 @@
 
 Recall is an open-source Chrome extension that helps LeetCode users revisit solved problems with spaced repetition and pattern-focused daily practice.
 
+<h2 align="center">Screenshots</h2>
+
+<p align="center">
+  <img src="src/assets/recall.jpeg" width="30%" alt="Recall screenshot 1" />
+  <img src="src/assets/recall2.jpeg" width="30%" alt="Recall screenshot 2" />
+  <img src="src/assets/recall3.jpeg" width="30%" alt="Recall screenshot 3" />
+</p><h2 align="center">Screenshots</h2>
+
+<p align="center">
+  <img src="src/assets/recall.jpeg" width="30%" alt="Recall screenshot 1" />
+  <img src="src/assets/recall2.jpeg" width="30%" alt="Recall screenshot 2" />
+  <img src="src/assets/recall3.jpeg" width="30%" alt="Recall screenshot 3" />
+</p>
+
 ## Why Recall?
 
 Solving a problem once does not make the approach permanent. Recall keeps track of accepted solutions, schedules future revisions, and turns the problems due today into a small, focused review queue.
