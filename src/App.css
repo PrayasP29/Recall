@@ -142,6 +142,25 @@ h2 {
   border-color: var(--accent-border);
 }
 
+/* Support footer — secondary, below everything */
+footer {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+.open.support {
+  font: inherit;
+  font-size: 11px;
+  color: var(--text);
+}
+.open.support:hover:not(:disabled) {
+  color: var(--accent);
+}
+.open.support:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Calendar */
 .month-nav {
   display: flex;

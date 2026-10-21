@@ -9,6 +9,11 @@ import {
 } from './lib/revisionScheduler.js'
 import './App.css'
 
+// ponytail: set SUPPORT_URL to the real support page before release.
+// While null the button renders disabled and links nowhere — intentional,
+// so we never ship a placeholder URL that looks like a real destination.
+const SUPPORT_URL = null
+
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 const pad = (n) => String(n).padStart(2, '0')
 
@@ -251,6 +256,18 @@ function App() {
           <p className="empty-state">No solved problems or revisions this month.</p>
         ) : null}
       </section>
+
+      <footer>
+        {SUPPORT_URL ? (
+          <a className="open support" href={SUPPORT_URL} target="_blank" rel="noreferrer">
+            Support Recall
+          </a>
+        ) : (
+          <button type="button" className="open support" disabled title="Support URL not configured yet">
+            Support Recall
+          </button>
+        )}
+      </footer>
     </div>
   )
 }
