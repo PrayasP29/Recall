@@ -3,8 +3,6 @@
   --text: #c4c4c9;        /* secondary */
   --text-h: #f5f5f5;      /* primary */
   --bg: #0d0507;          /* deep near-black with a red undertone */
-  --border: rgba(255, 255, 255, 0.12);
-  --code-bg: #1f2028;
   --accent: #ff4d5e;      /* restrained crimson */
   --accent-bg: rgba(255, 77, 94, 0.14);
   --accent-border: rgba(255, 77, 94, 0.45);
@@ -15,14 +13,12 @@
   --forgotten: #f87171;
 
   /* Glass surfaces */
-  --glass: rgba(18, 10, 13, 0.62);        /* text-heavy panels */
   --glass-strong: rgba(12, 6, 8, 0.78);   /* problem cards */
   --glass-weak: rgba(30, 16, 20, 0.42);   /* secondary controls */
   --glass-border: rgba(255, 255, 255, 0.14);
   --glass-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
 
   font: 13px/145% var(--sans);
   letter-spacing: 0.18px;

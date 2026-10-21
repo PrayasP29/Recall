@@ -1,90 +1,106 @@
 # Recall
 
-**A Chrome extension that remembers the LeetCode problems you have already solved — so you can actually remember them.**
+Recall is an open-source Chrome extension that helps LeetCode users revisit solved problems with spaced repetition and pattern-focused daily practice.
 
-Solving a problem once is easy to forget. Recall automatically tracks every **Accepted** LeetCode submission in your browser, keeps a local history of what you solved and when, and (coming next) tells you which problems you should revise today.
+## Why Recall?
 
-## Problem
+Solving a problem once does not make the approach permanent. Recall keeps track of accepted solutions, schedules future revisions, and turns the problems due today into a small, focused review queue.
 
-Most people solve LeetCode problems and never see them again. Spaced revision is the part everyone skips: you forget patterns, re-solve the same easy problems, and lose track of what you actually know. Recall automates the bookkeeping so revision can happen.
+## Features
 
-## Current features
+- Tracks accepted LeetCode submissions from problem pages.
+- Imports solved problems through the explicit **Sync LeetCode History** button.
+- Schedules imported problems across future days instead of putting the entire history in one queue.
+- Lets you mark due problems **Remembered** or **Forgotten**. Remembered reviews use consecutive intervals of 3, 7, 14, and 30 days; Forgotten reviews are due again the next day.
+- Chooses a daily focus from available DSA pattern tags, with untagged or generic-tag-only problems shown under **Other**.
+- Shows due and overdue questions, while future dates provide a preview of questions scheduled for that day.
+- Stores problem records locally in `chrome.storage.local`.
+- Uses a compact branded popup with direct links back to LeetCode problems.
 
-- **Automatic submission tracking** — a content script watches LeetCode problem pages; when you click **Submit** and the verdict is exactly `Accepted`, the problem is recorded automatically. No buttons to click.
-- **Duplicate prevention** — one record per problem; re-solving updates `lastAcceptedAt` but preserves `firstSolvedAt`.
-- **Local-only storage** — everything lives in `chrome.storage.local`. No accounts, no server, no telemetry. Your data never leaves your browser.
-- **Clean data model** — each record stores `problemId` (slug), `title`, normalized `url`, `difficulty`, `firstSolvedAt`, `lastAcceptedAt`, `revisionHistory`, and `nextRevisionAt` (reserved for the scheduler).
+## How It Works
 
-## Technology stack
+1. Install or load the extension.
+2. Open `leetcode.com` in a tab and sign in.
+3. Click **Sync LeetCode History** in the Recall popup to import your solved-problem history. Sync is explicit; it does not run automatically.
+4. Review the questions scheduled for today.
+5. Open a problem when needed, then mark it **Remembered** or **Forgotten**.
+6. Return later to continue the revision queue.
 
-- React 19 + Vite 8 (popup UI scaffold)
-- Chrome Extension Manifest V3
-- Vanilla JS content script (bundled by Vite)
-- `chrome.storage.local`
-- ESLint, `node:test` (no test framework dependency)
+Accepted submissions on LeetCode problem pages are also tracked after a real **Submit** click and an `Accepted` result.
 
-## Prerequisites
+## Installation for Users
 
-- Node.js 20.19+ / 22.12+ (developed and tested on Node 24)
+Recall is not currently published in the Chrome Web Store. To install a local build:
+
+1. Follow the [development setup](#development-setup).
+2. Run `npm run build`.
+3. Open `chrome://extensions` in Chrome or another Chromium browser.
+4. Enable **Developer mode**.
+5. Choose **Load unpacked** and select the repository's `dist/` directory.
+
+## Development Setup
+
+Prerequisites:
+
+- Node.js 24 (the CI workflow uses Node 24)
 - npm
-- Google Chrome (or any Chromium browser)
+- Chrome or another Chromium browser for manual extension testing
 
-## Installation (for developers)
-
-```bash
-git clone https://github.com/PrayasP29/Recall.git
-cd Recall
-npm install
-```
-
-## Building the extension
+Install dependencies and run the checks:
 
 ```bash
+npm ci
+npm test
+npm run lint
 npm run build
 ```
 
-This produces a ready-to-load extension in `dist/` (`manifest.json`, `content.js`, and the popup app).
+The build writes the unpacked extension to `dist/`. The directory is generated and must not be committed. Load it through Chrome's **Load unpacked** workflow when testing the popup or content script.
 
-## Loading the extension in Chrome
+## Project Structure
 
-1. Run `npm run build`.
-2. Open `chrome://extensions`.
-3. Enable **Developer mode** (top-right).
-4. Click **Load unpacked** and select the `dist/` folder.
-5. Visit any [LeetCode problem](https://leetcode.com/problems/two-sum/), solve it, and click **Submit**.
-6. After an **Accepted** verdict, open the extension popup → right-click → *Inspect* → console:
-   `chrome.storage.local.get(null, r => console.log(r))`
-   You should see the problem under the `problems` key.
+- `src/` — popup UI, content script, styles, assets, and application logic.
+- `src/lib/` — testable tracking, importing, scheduling, and pattern-selection modules plus their `node:test` suites.
+- `public/` — files copied into the extension package.
+- `public/manifest.json` — Manifest V3 metadata, icons, permissions, popup entry point, and content-script registration.
+- `vite.config.js` — builds the React popup and copies public extension assets.
+- `vite.content.config.js` — separately bundles `src/content.js` as a classic IIFE for Manifest V3 content-script compatibility.
+- `.github/` — CI, issue templates, and the pull request template.
 
-## Testing
+Two Vite configurations are required because the popup can use the React module build, while Chrome content scripts must be packaged as a self-contained classic script.
 
-```bash
-npm test    # unit tests for the tracking logic (node:test, no extra deps)
-npm run lint
-```
+## Architecture and Data
 
-The unit tests cover verdict classification, URL normalization, slug extraction, and the first-solve / re-solve / duplicate storage behavior.
+The popup reads and writes problem records in `chrome.storage.local`. A record includes the problem slug, title, URL, difficulty, topic tags, accepted-solve timestamps, revision history, and the next revision day.
 
-## Current limitations
+The content tracker watches LeetCode problem pages for a real Submit click followed by an exact `Accepted` verdict, then records the problem. The history importer runs in the LeetCode tab when the popup sends a sync request; it paginates LeetCode's solved-problem GraphQL result, merges records by slug, and schedules newly imported problems. The revision scheduler applies the Remembered/Forgotten intervals, while the pattern module selects and groups the daily queue.
 
-- **The popup UI is still the Vite starter scaffold** — tracking works, but there is no UI to browse your solved problems yet.
-- **Revision calendar and daily recommendations are not implemented.** `nextRevisionAt` exists in the data model but stays `null` until the scheduler lands.
-- **No extension icons yet** (Chrome shows the default puzzle icon).
-- **Submission detection is DOM-based.** It requires an actual Submit click and an exact `Accepted` verdict text (verified on live LeetCode, but LeetCode's UI can change).
-- Title/difficulty capture is best-effort and may be `null` if LeetCode changes its page data.
-- Not published to the Chrome Web Store.
+## Privacy
+
+- Problem records are stored locally in Chrome's `chrome.storage.local`; Recall has no account system or backend.
+- Recall does not include telemetry or analytics.
+- On LeetCode problem pages, the content script reads the current problem URL, page title, and best-effort difficulty/topic metadata to recognize accepted submissions.
+- When you explicitly click **Sync LeetCode History**, Recall reads the solved-problem list exposed by LeetCode, including slugs, titles, difficulty, and topic tags.
+- The sync request reads the `csrftoken` cookie locally in the LeetCode tab and sends it as the `x-csrftoken` header only to `https://leetcode.com/graphql/`. The token is not stored or logged.
+- The extension communicates with LeetCode for tracking context and history sync. It does not send problem records or usage data to any other service.
+- The `storage` permission is used for local problem records. The LeetCode host permission allows the content script and the explicit history-sync request to operate on LeetCode pages.
+
+## Limitations
+
+- Submission detection depends on LeetCode's DOM and exact `Accepted` text, so LeetCode UI changes may require maintenance.
+- Title, difficulty, and topic tags are best-effort metadata. Topic-tag retrieval may be unavailable when LeetCode does not expose the data on a page.
+- History sync requires a signed-in LeetCode tab and must be started by clicking the sync button.
+- Recall is not currently available through the Chrome Web Store.
+- **Support Recall** is currently a disabled placeholder because `SUPPORT_URL` is not configured.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Short version: fork → feature branch → tests/lint/build green → pull request. Never commit directly to `main`.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, testing, branch, and pull request guidance.
 
-## Planned features
+## Security
 
-- **Revision calendar** — a calendar of solved problems with scheduled revision dates.
-- **Daily revision recommendations** — spaced-repetition scheduling; you mark each problem as *remembered* or *forgot*, and future dates adjust.
-- **Support Recall button** — an external, voluntary-contribution page (Razorpay for eligible Indian users, GitHub Sponsors for international supporters). Payments stay fully external: no checkout, accounts, or payment backend inside the extension.
-- Real popup UI for browsing your history.
+Please see [SECURITY.md](SECURITY.md) for private vulnerability-reporting instructions. Do not disclose exploitable vulnerabilities in a public issue.
 
 ## License
 
-[MIT](LICENSE) © Prayas P29
+Recall is available under the [MIT License](LICENSE).
