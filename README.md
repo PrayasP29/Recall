@@ -72,7 +72,7 @@ Separate Vite configurations are required because the popup uses the React modul
 
 ## Architecture and Data
 
-The popup reads and writes problem records in `chrome.storage.local`. A record includes the problem slug, title, URL, difficulty, topic tags, accepted-solve timestamps, revision history, and the next revision day.
+The popup displays problem records stored in `chrome.storage.local`; the service worker owns their reads and writes. A record includes the problem slug, title, URL, difficulty, topic tags, accepted-solve timestamps, revision history, and the next revision day.
 
 The content tracker watches LeetCode problem pages for a real Submit click followed by an exact `Accepted` verdict, then sends that one problem to the service worker for a serialized local-storage update. It does not run a full account-history import after a submission. The history importer is a separate, explicit recovery and initial-import path: it runs in the LeetCode tab when the popup sends a sync request, fetches LeetCode's solved-problem GraphQL result, and asks the service worker to merge and schedule the result. The revision scheduler applies the Remembered/Forgotten intervals, while the pattern module selects and groups the daily queue.
 
