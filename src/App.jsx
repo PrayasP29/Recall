@@ -1,11 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import {
-  addDays,
-  applyRevision,
-  isDue,
-  toLocalDay,
-  withInitialSchedule,
-} from './lib/revisionScheduler.js'
+import { addDays, isDue, toLocalDay } from './lib/revisionScheduler.js'
 import './App.css'
 import { dayPlan } from './lib/patterns.js'
 import bgImage from './assets/bg.jpeg'
@@ -102,16 +96,19 @@ function App() {
   }, [])
 
   useEffect(() => {
-    chrome.storage.local.get('problems').then(({ problems: stored = {} } = {}) => {
-      const migrated = Object.fromEntries(
-        Object.entries(stored).map(([id, rec]) => [id, withInitialSchedule(rec)]),
-      )
-      // Persist one-time migration of legacy records (null nextRevisionAt).
-      if (Object.entries(migrated).some(([id, rec]) => rec !== stored[id])) {
-        chrome.storage.local.set({ problems: migrated })
-      }
-      setProblems(migrated)
-    })
+    chrome.runtime.sendMessage({ type: 'RECALL_MIGRATE_PROBLEMS' })
+      .then((response) => {
+        if (response?.status === 'ok') {
+          setProblems(response.problems)
+        } else {
+          setProblems({})
+          setSync({ status: 'error', message: response?.message ?? 'Could not load stored problems.' })
+        }
+      })
+      .catch(() => {
+        setProblems({})
+        setSync({ status: 'error', message: 'Could not load stored problems.' })
+      })
   }, [])
 
   // Problems shown for the selected day. On/before today this is the due +
@@ -146,13 +143,20 @@ function App() {
 
   async function review(id, result) {
     if (busy) return
-    const updated = applyRevision(problems[id], result)
-    if (updated === problems[id]) return // duplicate attempt guard
-    const next = { ...problems, [id]: updated }
-    setProblems(next) // instant UI update: the card leaves the queue
     setBusy(true)
     try {
-      await chrome.storage.local.set({ problems: next })
+      const response = await chrome.runtime.sendMessage({
+        type: 'RECALL_REVIEW_PROBLEM',
+        problemId: id,
+        result,
+      })
+      if (response?.status === 'ok') {
+        setProblems(response.problems)
+      } else {
+        setSync({ status: 'error', message: response?.message ?? 'Could not save review.' })
+      }
+    } catch {
+      setSync({ status: 'error', message: 'Could not save review.' })
     } finally {
       setBusy(false)
     }

@@ -20,13 +20,13 @@ Solving a problem once does not make the approach permanent. Recall keeps track 
 ## How It Works
 
 1. Install or load the extension.
-2. Open `leetcode.com` in a tab and sign in.
-3. Click **Sync LeetCode History** in the Recall popup to import your solved-problem history. Sync is explicit; it does not run automatically.
+2. Open `leetcode.com` in a tab and sign in. If the tab was already open when Recall was installed or reloaded, reload the tab so Chrome can inject the content script.
+3. Click **Sync LeetCode History** in the Recall popup to import your existing solved-problem history. Sync is explicit; it does not run automatically.
 4. Review the questions scheduled for today.
 5. Open a problem when needed, then mark it **Remembered** or **Forgotten**.
 6. Return later to continue the revision queue.
 
-Accepted submissions on LeetCode problem pages are also tracked after a real **Submit** click and an `Accepted` result.
+After the initial import, future accepted submissions are tracked directly on the LeetCode problem page: a real **Submit** click followed by an observable `Accepted` result adds the problem locally or updates its existing record. You do not need to run a full history sync after every successful submission. The sync button remains available to recover from a missed submission, reinstall, or lost local history.
 
 ## Installation for Users
 
@@ -65,15 +65,16 @@ The build writes the unpacked extension to `dist/`. The directory is generated a
 - `public/manifest.json` — Manifest V3 metadata, icons, permissions, popup entry point, and content-script registration.
 - `vite.config.js` — builds the React popup and copies public extension assets.
 - `vite.content.config.js` — separately bundles `src/content.js` as a classic IIFE for Manifest V3 content-script compatibility.
+- `vite.background.config.js` — bundles the MV3 service worker that serializes all problem-record writes.
 - `.github/` — CI, issue templates, and the pull request template.
 
-Two Vite configurations are required because the popup can use the React module build, while Chrome content scripts must be packaged as a self-contained classic script.
+Separate Vite configurations are required because the popup uses the React module build, while the content script and service worker must be packaged as self-contained classic scripts.
 
 ## Architecture and Data
 
 The popup reads and writes problem records in `chrome.storage.local`. A record includes the problem slug, title, URL, difficulty, topic tags, accepted-solve timestamps, revision history, and the next revision day.
 
-The content tracker watches LeetCode problem pages for a real Submit click followed by an exact `Accepted` verdict, then records the problem. The history importer runs in the LeetCode tab when the popup sends a sync request; it paginates LeetCode's solved-problem GraphQL result, merges records by slug, and schedules newly imported problems. The revision scheduler applies the Remembered/Forgotten intervals, while the pattern module selects and groups the daily queue.
+The content tracker watches LeetCode problem pages for a real Submit click followed by an exact `Accepted` verdict, then sends that one problem to the service worker for a serialized local-storage update. It does not run a full account-history import after a submission. The history importer is a separate, explicit recovery and initial-import path: it runs in the LeetCode tab when the popup sends a sync request, fetches LeetCode's solved-problem GraphQL result, and asks the service worker to merge and schedule the result. The revision scheduler applies the Remembered/Forgotten intervals, while the pattern module selects and groups the daily queue.
 
 ## Privacy
 
@@ -89,7 +90,9 @@ The content tracker watches LeetCode problem pages for a real Submit click follo
 
 - Submission detection depends on LeetCode's DOM and exact `Accepted` text, so LeetCode UI changes may require maintenance.
 - Title, difficulty, and topic tags are best-effort metadata. Topic-tag retrieval may be unavailable when LeetCode does not expose the data on a page.
-- History sync requires a signed-in LeetCode tab and must be started by clicking the sync button.
+- History sync requires a signed-in LeetCode tab and must be started by clicking the sync button; it does not run automatically in the background.
+- Automatic tracking requires Recall's content script to be active on the problem page. If LeetCode was already open when the extension was installed or reloaded, reload that tab first.
+- Automatic tracking depends on LeetCode's page interface: Recall needs to observe the real Submit action and an exact `Accepted` verdict. A changed, hidden, or otherwise unobservable result can be missed and should be recovered with **Sync LeetCode History**.
 - Recall is not currently available through the Chrome Web Store.
 - **Support Recall** is currently a disabled placeholder because `SUPPORT_URL` is not configured.
 
