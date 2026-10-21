@@ -78,6 +78,8 @@ The content tracker watches LeetCode problem pages for a real Submit click follo
 
 ## Privacy
 
+See [PRIVACY.md](PRIVACY.md) for the detailed privacy policy.
+
 - Problem records are stored locally in Chrome's `chrome.storage.local`; Recall has no account system or backend.
 - Recall does not include telemetry or analytics.
 - On LeetCode problem pages, the content script reads the current problem URL, page title, and best-effort difficulty/topic metadata to recognize accepted submissions.
