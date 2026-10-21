@@ -1,25 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  addDays,
   applyRevision,
-  calendarEvents,
-  dueProblems,
   isDue,
   toLocalDay,
   withInitialSchedule,
 } from './lib/revisionScheduler.js'
 import './App.css'
+import { dayPlan } from './lib/patterns.js'
+import bgImage from './assets/bg.jpeg'
 
 // ponytail: set SUPPORT_URL to the real support page before release.
 // While null the button renders disabled and links nowhere — intentional,
 // so we never ship a placeholder URL that looks like a real destination.
 const SUPPORT_URL = null
 
-const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
-const pad = (n) => String(n).padStart(2, '0')
-
 const fmtDay = (day) => {
   const [y, m, d] = day.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  })
 }
 
 const label = (rec) => rec.title || rec.problemId
@@ -46,15 +48,46 @@ function ProblemLink({ rec }) {
   )
 }
 
+// One problem card, reused by every section. `due` gates the review actions;
+// future-day cards render Open-only.
+function ProblemCard({ rec, due, busy, today, onReview }) {
+  return (
+    <div className="card">
+      <div className="card-top">
+        <span className="title">{label(rec)}</span>
+        {rec.difficulty && (
+          <span className={`diff ${rec.difficulty.toLowerCase()}`}>{rec.difficulty}</span>
+        )}
+      </div>
+      <div className="card-bottom">
+        <span className={due && rec.nextRevisionAt < today ? 'overdue' : 'due'}>
+          {due
+            ? rec.nextRevisionAt < today
+              ? `Overdue — was due ${fmtDay(rec.nextRevisionAt)}`
+              : 'Due today'
+            : `Scheduled ${fmtDay(rec.nextRevisionAt)}`}
+        </span>
+        <ProblemLink rec={rec} />
+      </div>
+      {due ? (
+        <div className="actions">
+          <button type="button" className="btn remembered" disabled={busy} onClick={() => onReview(rec.problemId, 'remembered')}>
+            Remembered
+          </button>
+          <button type="button" className="btn forgotten" disabled={busy} onClick={() => onReview(rec.problemId, 'forgotten')}>
+            Forgotten
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function App() {
   const [problems, setProblems] = useState(null) // null = still loading
   // ponytail: "today" is fixed when the popup opens; reopen it after midnight.
   const [today] = useState(() => toLocalDay(new Date()))
-  const [view, setView] = useState(() => {
-    const d = new Date()
-    return { year: d.getFullYear(), month: d.getMonth() }
-  })
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected] = useState(() => toLocalDay(new Date()))
   const [busy, setBusy] = useState(false)
   const [sync, setSync] = useState({ status: 'idle' })
 
@@ -80,8 +113,28 @@ function App() {
     })
   }, [])
 
-  const due = useMemo(() => (problems ? dueProblems(problems, today) : []), [problems, today])
-  // Earliest upcoming revision — explains an empty queue ("why no buttons?").
+  // Problems shown for the selected day. On/before today this is the due +
+  // overdue queue (isDue); on a future day it is exactly what is scheduled
+  // that day — the same nextRevisionAt match calendarEvents uses internally,
+  // but not month-scoped so day navigation can cross month boundaries.
+  // Past/today: one focus pattern (≤3) + overdue/other safety sections,
+  // derived purely from the day's due+overdue list. Future: exactly what is
+  // scheduled that day, Open-only — the heading is "Scheduled", not a pattern.
+  const plan = useMemo(() => {
+    if (!problems) return { focusTopic: null, focus: [], overdue: [], other: [] }
+    const all = Object.values(problems)
+    if (selected > today) {
+      return {
+        focusTopic: 'Scheduled',
+        focus: all.filter((r) => r.nextRevisionAt === selected),
+        overdue: [],
+        other: [],
+      }
+    }
+    return dayPlan(all, selected)
+  }, [problems, selected, today])
+
+  // Earliest upcoming revision — explains an empty day ("why no buttons?").
   const nextUp = useMemo(() => {
     if (!problems) return null
     const days = Object.values(problems)
@@ -89,10 +142,6 @@ function App() {
       .filter((d) => d && d > today)
     return days.length ? days.sort()[0] : null
   }, [problems, today])
-  const events = useMemo(
-    () => (problems ? calendarEvents(problems, view.year, view.month) : {}),
-    [problems, view],
-  )
 
   async function review(id, result) {
     if (busy) return
@@ -108,12 +157,8 @@ function App() {
     }
   }
 
-  function shiftMonth(delta) {
-    setSelected(null)
-    setView(({ year, month }) => {
-      const d = new Date(year, month + delta, 1)
-      return { year: d.getFullYear(), month: d.getMonth() }
-    })
+  function shiftDay(delta) {
+    setSelected((d) => addDays(d, delta))
   }
 
   async function syncHistory() {
@@ -146,16 +191,10 @@ function App() {
 
   if (!problems) return <div className="app empty-state">Loading…</div>
 
-  const firstWeekday = new Date(view.year, view.month, 1).getDay()
-  const daysInMonth = new Date(view.year, view.month + 1, 0).getDate()
-  const monthLabel = new Date(view.year, view.month, 1).toLocaleDateString(undefined, {
-    month: 'long',
-    year: 'numeric',
-  })
-  const selectedEvents = selected ? events[selected] : null
+  const total = plan.focus.length + plan.overdue.length + plan.other.length
 
   return (
-    <div className="app">
+    <div className="app" style={{ '--bg-image': `url(${bgImage})` }}>
       <header>
         <h1>Recall</h1>
         <span className="subtitle">LeetCode revision tracker</span>
@@ -169,151 +208,78 @@ function App() {
       </section>
 
       <section>
-        <h2>Due today {due.length > 0 && <span className="count">{due.length}</span>}</h2>
-        {due.length === 0 ? (
-          <p className="empty-state">
-            All caught up — nothing due today.
-            {nextUp ? ` Next revision: ${fmtDay(nextUp)}.` : ''}
-          </p>
-        ) : (
-          due.map((rec) => (
-            <div className="card" key={rec.problemId}>
-              <div className="card-top">
-                <span className="title">{label(rec)}</span>
-                {rec.difficulty && <span className={`diff ${rec.difficulty.toLowerCase()}`}>{rec.difficulty}</span>}
-              </div>
-              <div className="card-bottom">
-                <span className={rec.nextRevisionAt < today ? 'overdue' : 'due'}>
-                  {rec.nextRevisionAt < today
-                    ? `Overdue — was due ${fmtDay(rec.nextRevisionAt)}`
-                    : 'Due today'}
-                </span>
-                <ProblemLink rec={rec} />
-              </div>
-              <div className="actions">
-                <button type="button" className="btn remembered" disabled={busy} onClick={() => review(rec.problemId, 'remembered')}>
-                  Remembered
-                </button>
-                <button type="button" className="btn forgotten" disabled={busy} onClick={() => review(rec.problemId, 'forgotten')}>
-                  Forgotten
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-      </section>
-
-      <section>
-        <div className="month-nav">
-          <button type="button" className="btn nav" onClick={() => shiftMonth(-1)} aria-label="Previous month">
+        <div className="day-nav">
+          <button type="button" className="btn nav" onClick={() => shiftDay(-1)} aria-label="Previous day">
             ‹
           </button>
-          <h2 className="month-label">{monthLabel}</h2>
-          <button type="button" className="btn nav" onClick={() => shiftMonth(1)} aria-label="Next month">
+          <span className="day-label">{selected === today ? 'Today' : fmtDay(selected)}</span>
+          <button type="button" className="btn nav" onClick={() => shiftDay(1)} aria-label="Next day">
             ›
           </button>
         </div>
 
-        <div className="grid">
-          {WEEKDAYS.map((w) => (
-            <div className="wd" key={w}>
-              {w}
-            </div>
-          ))}
-          {Array.from({ length: firstWeekday }, (_, i) => (
-            <div className="cell blank" key={`b${i}`} />
-          ))}
-          {Array.from({ length: daysInMonth }, (_, i) => {
-            const day = `${view.year}-${pad(view.month + 1)}-${pad(i + 1)}`
-            const ev = events[day]
-            return (
-              <button
-                type="button"
-                key={day}
-                className={`cell${selected === day ? ' selected' : ''}${day === today ? ' today' : ''}`}
-                onClick={() => setSelected(selected === day ? null : day)}
-              >
-                <span className="num">{i + 1}</span>
-                <span className="dots">
-                  {ev?.solved?.length ? <i className="dot solved" /> : null}
-                  {ev?.revisions?.length ? <i className="dot revision" /> : null}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-
-        <div className="legend">
-          <span>
-            <i className="dot solved" /> First solved
-          </span>
-          <span>
-            <i className="dot revision" /> Revision due
-          </span>
-        </div>
-
-        {selected ? (
-          selectedEvents ? (
-            <div className="day-panel">
-              <h3>{fmtDay(selected)}</h3>
-              {selectedEvents.solved.map((rec) => (
-                <div className="row" key={`s-${rec.problemId}`}>
-                  <span>
-                    {label(rec)} <em>solved</em>
+        {total === 0 ? (
+          <p className="empty-state">
+            {selected === today ? 'Nothing due today.' : 'No revisions scheduled this day.'}
+            {nextUp ? ` Next revision: ${fmtDay(nextUp)}.` : ''}
+          </p>
+        ) : (
+          <>
+            {plan.focus.length > 0 && (
+              <div className="topic-group">
+                <h2 className="topic-heading focus">
+                  {plan.focusTopic || 'Other'}
+                  <span className="count">
+                    {' '}· {plan.focus.length}
+                    {plan.focusTopic !== 'Scheduled'
+                      ? ` ${plan.focus.length === 1 ? 'question' : 'questions'}`
+                      : ''}
                   </span>
-                  <ProblemLink rec={rec} />
-                </div>
-              ))}
-              {selectedEvents.revisions.map((rec) => {
-                const due = isDue(rec, today)
-                return (
-                  <div className="row" key={`r-${rec.problemId}`}>
-                    <span>
-                      {label(rec)}{' '}
-                      <em>
-                        {due
-                          ? rec.nextRevisionAt < today
-                            ? 'revision overdue'
-                            : 'revision due today'
-                          : 'revision scheduled'}
-                      </em>
-                    </span>
-                    <span className="row-controls">
-                      <ProblemLink rec={rec} />
-                      {due ? (
-                        <>
-                          <button
-                            type="button"
-                            className="btn remembered"
-                            disabled={busy}
-                            onClick={() => review(rec.problemId, 'remembered')}
-                          >
-                            Remembered
-                          </button>
-                          <button
-                            type="button"
-                            className="btn forgotten"
-                            disabled={busy}
-                            onClick={() => review(rec.problemId, 'forgotten')}
-                          >
-                            Forgotten
-                          </button>
-                        </>
-                      ) : null}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="day-panel">
-              <h3>{fmtDay(selected)}</h3>
-              <p className="empty-state">Nothing recorded for this day.</p>
-            </div>
-          )
-        ) : Object.keys(events).length === 0 ? (
-          <p className="empty-state">No solved problems or revisions this month.</p>
-        ) : null}
+                </h2>
+                {plan.focus.map((rec) => (
+                  <ProblemCard
+                    key={rec.problemId}
+                    rec={rec}
+                    due={isDue(rec, today)}
+                    busy={busy}
+                    today={today}
+                    onReview={review}
+                  />
+                ))}
+              </div>
+            )}
+            {plan.overdue.length > 0 && (
+              <div className="topic-group">
+                <h2 className="topic-heading secondary">Overdue</h2>
+                {plan.overdue.map((rec) => (
+                  <ProblemCard
+                    key={rec.problemId}
+                    rec={rec}
+                    due={isDue(rec, today)}
+                    busy={busy}
+                    today={today}
+                    onReview={review}
+                  />
+                ))}
+              </div>
+            )}
+            {plan.other.length > 0 && (
+              <div className="topic-group">
+                <h2 className="topic-heading secondary">Other</h2>
+                {plan.other.map((rec) => (
+                  <ProblemCard
+                    key={rec.problemId}
+                    rec={rec}
+                    due={isDue(rec, today)}
+                    busy={busy}
+                    today={today}
+                    onReview={review}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </section>
 
       <footer>

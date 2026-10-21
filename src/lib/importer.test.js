@@ -160,6 +160,70 @@ test('merging the same page twice is idempotent', () => {
   assert.deepEqual(second.stats, { discovered: 2, added: 0, matched: 2, skipped: 0 })
 })
 
+// --- topic metadata -------------------------------------------------------
+
+const tags = (...names) => names.map((name) => ({ name, slug: name.toLowerCase() }))
+
+test('new imports store normalized topic tags', () => {
+  const { problems } = mergeImported({}, [
+    q('two-sum', { topicTags: tags('Array', 'Hash Table', 'Array') }),
+  ])
+  assert.deepEqual(problems['two-sum'].topics, ['Array', 'Hash Table'])
+})
+
+test('new imports with no tags get an empty topics array', () => {
+  const { problems } = mergeImported({}, [q('no-tags')])
+  assert.deepEqual(problems['no-tags'].topics, [])
+})
+
+test('malformed topic responses become [] without breaking the import', () => {
+  const { problems, stats } = mergeImported({}, [
+    q('a', { topicTags: 'Array' }),
+    q('b', { topicTags: [1, {}, null] }),
+  ])
+  assert.deepEqual(problems.a.topics, [])
+  assert.deepEqual(problems.b.topics, [])
+  assert.equal(stats.added, 2)
+})
+
+test('existing records are backfilled when topics become available', () => {
+  const existing = {
+    'two-sum': {
+      problemId: 'two-sum',
+      title: 'Two Sum',
+      difficulty: 'Easy',
+      topics: [],
+      firstSolvedAt: '2026-10-01T10:00:00.000Z',
+      lastAcceptedAt: '2026-10-01T10:00:00.000Z',
+      revisionHistory: [{ at: '2026-10-02T00:00:00.000Z', result: 'remembered' }],
+      nextRevisionAt: '2026-10-20',
+    },
+  }
+  const { problems } = mergeImported(existing, [
+    q('two-sum', { title: 'Two Sum', difficulty: 'Easy', topicTags: tags('Two Pointers') }),
+  ])
+  assert.deepEqual(problems['two-sum'].topics, ['Two Pointers'])
+  assert.equal(problems['two-sum'].nextRevisionAt, '2026-10-20')
+  assert.deepEqual(problems['two-sum'].revisionHistory, existing['two-sum'].revisionHistory)
+})
+
+test('empty or failed tag retrieval never erases stored topics', () => {
+  const existing = {
+    'two-sum': { problemId: 'two-sum', topics: ['Two Pointers'], nextRevisionAt: '2026-10-20' },
+  }
+  const { problems } = mergeImported(existing, [q('two-sum')])
+  assert.deepEqual(problems['two-sum'].topics, ['Two Pointers'])
+})
+
+test('a failed tag response does not delete existing records', () => {
+  const existing = {
+    'two-sum': { problemId: 'two-sum', topics: ['Array'], nextRevisionAt: '2026-10-20' },
+  }
+  const { problems } = mergeImported(existing, [q('other', { topicTags: tags('Heap') })])
+  assert.ok(problems['two-sum'])
+  assert.equal(problems['other'].topics[0], 'Heap')
+})
+
 // --- sync orchestration ---------------------------------------------------
 
 test('paginates until totalNum is reached and schedules imports at 3/day', async () => {
