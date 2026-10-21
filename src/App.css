@@ -1,10 +1,51 @@
 .app {
-  width: 360px;
+  position: relative;
+  width: 320px;
+  min-height: 240px;
   box-sizing: border-box;
-  padding: 12px 14px 16px;
+  padding: 10px 12px 12px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
+  /* Solid dark fallback under everything (backdrop-filter unsupported too). */
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* Background image lives on a fixed-pseudo layer so children (and their
+   backdrop-filter) sit above it. The gradient is the dark overlay that
+   keeps text legible while the image stays visible. */
+.app::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(8, 3, 4, 0.62), rgba(8, 3, 4, 0.78)),
+    var(--bg-image);
+  background-size: cover, cover;
+  background-position: center, center 30%;
+  background-repeat: no-repeat, no-repeat;
+  /* ponytail: image fixed to the popup container (not the viewport), so a
+     scrolled long list keeps the same backdrop. Upgrade to parallax only
+     if the popup ever gains a scroll container. */
+  background-attachment: scroll, scroll;
+}
+
+/* Every direct child sits above the background layer. */
+.app > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Glass surface helper used by panels and controls. */
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
 }
 
 header {
@@ -28,7 +69,7 @@ h1 {
 section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 h2 {
@@ -41,7 +82,8 @@ h2 {
 }
 
 .count {
-  color: var(--accent);
+  color: var(--text);
+  font-weight: 500;
 }
 
 .empty-state {
@@ -51,12 +93,21 @@ h2 {
   padding: 8px 0;
 }
 
-/* History sync — one row, existing button styling */
+/* History sync — secondary action, muted button */
 .sync {
   flex-direction: row;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+}
+.sync .btn {
+  font-size: 11px;
+  padding: 3px 9px;
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--glass-weak);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 .sync-status {
   font-size: 11px;
@@ -66,14 +117,18 @@ h2 {
   color: var(--forgotten);
 }
 
-/* Queue cards */
+/* Queue cards — darkest glass so text is never fighting the image */
 .card {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  padding: 7px 9px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .card-top,
@@ -95,15 +150,19 @@ h2 {
   font-weight: 600;
   border-radius: 4px;
   padding: 1px 6px;
+  border: 1px solid currentColor;
 }
 .diff.easy {
   color: var(--solved);
+  background: rgba(74, 222, 128, 0.12);
 }
 .diff.medium {
   color: var(--warning);
+  background: rgba(251, 191, 36, 0.12);
 }
 .diff.hard {
   color: var(--forgotten);
+  background: rgba(248, 113, 113, 0.12);
 }
 
 .due {
@@ -124,37 +183,53 @@ h2 {
 .btn {
   font: inherit;
   font-size: 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
+  border-radius: 7px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-weak);
   color: var(--text-h);
   padding: 4px 10px;
   cursor: pointer;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 .btn:hover:not(:disabled) {
   border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: default;
 }
 .btn.remembered {
   color: var(--solved);
+  border-color: rgba(74, 222, 128, 0.4);
 }
 .btn.forgotten {
   color: var(--forgotten);
+  border-color: rgba(248, 113, 113, 0.4);
 }
 
 .open {
   font-size: 12px;
   color: var(--accent);
   text-decoration: none;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 1px solid var(--accent-border);
+  background: var(--glass-weak);
+  border-radius: 7px;
   padding: 3px 10px;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 .open:hover {
-  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+.open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 /* Support footer — secondary, below everything */
@@ -167,138 +242,58 @@ footer {
   font: inherit;
   font-size: 11px;
   color: var(--text);
+  border-color: var(--glass-border);
+  background: var(--glass-weak);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 .open.support:hover:not(:disabled) {
   color: var(--accent);
 }
 .open.support:disabled {
-  opacity: 0.5;
+  opacity: 0.6;
   cursor: default;
 }
 
-/* Calendar */
-.month-nav {
+/* Day navigation — one day at a time, no month grid */
+.day-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
-.month-label {
-  text-transform: none;
+.day-label {
   font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
 }
 .btn.nav {
-  padding: 2px 10px;
+  padding: 1px 9px;
   font-size: 14px;
   line-height: 1.4;
+  background: var(--glass-weak);
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
-}
-
-.wd {
-  font-size: 10px;
-  text-align: center;
-  color: var(--text);
-  padding: 2px 0;
-}
-
-.cell {
-  font: inherit;
-  font-size: 11px;
-  position: relative;
-  aspect-ratio: 1;
-  border-radius: 6px;
-  border: 1px solid transparent;
-  background: none;
-  color: var(--text-h);
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 0;
-}
-.cell.blank {
-  visibility: hidden;
-  cursor: default;
-}
-.cell:hover:not(.blank) {
-  border-color: var(--border);
-}
-.cell.selected {
-  border-color: var(--accent);
-  background: var(--accent-bg);
-}
-.cell.today .num {
-  font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.dots {
-  display: flex;
-  gap: 2px;
-  height: 5px;
-}
-.dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.dot.solved {
-  background: var(--solved);
-}
-.dot.revision {
-  background: var(--accent);
-}
-
-.legend {
-  display: flex;
-  gap: 14px;
-  font-size: 10px;
-  color: var(--text);
-}
-.legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* Selected-day panel */
-.day-panel {
-  border-top: 1px solid var(--border);
-  padding-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.day-panel h3 {
-  font-size: 12px;
+/* Pattern grouping — small muted headings above each topic's cards */
+.topic-group { display: flex; flex-direction: column; gap: 5px; }
+.topic-group + .topic-group { margin-top: 8px; }
+.topic-heading {
   margin: 0;
-  color: var(--text-h);
-}
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px 8px;
-  font-size: 12px;
-  color: var(--text-h);
-}
-.row em {
-  font-style: normal;
   font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text);
+  opacity: 0.85;
 }
-.row-controls {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
+/* Focus pattern: the day's headline, in the accent colour. */
+.topic-heading.focus {
+  font-size: 11px;
+  color: var(--accent);
+  opacity: 1;
 }
+/* Overdue/Other: quieter secondary sections. */
+.topic-heading.secondary {
+  opacity: 0.6;
+  font-weight: 500;
+}
+

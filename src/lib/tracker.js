@@ -1,5 +1,6 @@
 // Pure tracking logic — no DOM, no chrome.* — so it can be unit tested with node:test.
 import { initialDueDay } from './revisionScheduler.js'
+import { normalizeTopics } from './patterns.js'
 
 // Verdict strings observed in LeetCode's submission result panel
 // (evidence: LeetUp extension uses this exact-text approach).
@@ -46,12 +47,14 @@ export function titleFromDocumentTitle(docTitle) {
 // Missing title/difficulty get backfilled when later sightings provide them.
 export function upsertProblem(existing, event) {
   const at = event.at
+  const topics = normalizeTopics(event.topics)
   if (!existing) {
     return {
       problemId: event.problemId,
       title: event.title ?? null,
       url: event.url,
       difficulty: event.difficulty ?? null,
+      topics,
       firstSolvedAt: at,
       lastAcceptedAt: at,
       revisionHistory: [],
@@ -60,11 +63,15 @@ export function upsertProblem(existing, event) {
     }
   }
   const lastAcceptedAt = existing.lastAcceptedAt > at ? existing.lastAcceptedAt : at
+  // Topics only fill in (never overwrite): the problem page may not expose
+  // tags, and a bare re-solve must not erase what a sync already stored.
+  const existingTopics = normalizeTopics(existing.topics)
   return {
     ...existing, // preserves revisionHistory and any existing revision schedule
     title: existing.title ?? event.title ?? null,
     difficulty: existing.difficulty ?? event.difficulty ?? null,
     lastAcceptedAt,
+    ...(existingTopics.length || !topics.length ? {} : { topics }),
     // Legacy records (nextRevisionAt null) get scheduled from firstSolvedAt.
     nextRevisionAt: existing.nextRevisionAt ?? initialDueDay(existing.firstSolvedAt),
   }

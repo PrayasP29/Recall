@@ -1,6 +1,7 @@
 // History importer — pure logic plus an injected fetch/storage orchestration.
 // No DOM, no chrome.* here, so every branch is unit-testable with node:test.
 import { assignImportSchedules } from './importScheduler.js'
+import { normalizeTopics } from './patterns.js'
 import { normalizeProblemUrl } from './tracker.js'
 import { toLocalDay } from './revisionScheduler.js'
 
@@ -60,14 +61,19 @@ export function mergeImported(problems, questions) {
     stats.discovered++
     const title = typeof q.title === 'string' && q.title ? q.title : null
     const difficulty = DIFFICULTIES.has(q.difficulty) ? q.difficulty : null
+    const topics = normalizeTopics(q.topicTags)
     const existing = next[slug]
     if (existing) {
       stats.matched++
-      if ((existing.title == null && title) || (existing.difficulty == null && difficulty)) {
+      // Backfill only: a null title/difficulty or an empty topic list (failed,
+      // logged-out, or absent retrieval) never overwrites what we already have.
+      const backfillTopics = !normalizeTopics(existing.topics).length && topics.length
+      if ((existing.title == null && title) || (existing.difficulty == null && difficulty) || backfillTopics) {
         next[slug] = {
           ...existing,
           title: existing.title ?? title,
           difficulty: existing.difficulty ?? difficulty,
+          ...(backfillTopics ? { topics } : {}),
         }
       }
       continue
@@ -78,6 +84,7 @@ export function mergeImported(problems, questions) {
       title,
       url: normalizeProblemUrl(slug),
       difficulty,
+      topics,
       // lastSubmittedAt is NOT a verified accepted-solve date — store nothing.
       firstSolvedAt: null,
       lastAcceptedAt: null,

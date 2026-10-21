@@ -75,6 +75,7 @@ function findVerdict(records) {
 function pageMeta() {
   let title = titleFromDocumentTitle(document.title)
   let difficulty = null
+  let topics = []
   const el = document.querySelector('script#__NEXT_DATA__')
   if (el) {
     try {
@@ -87,16 +88,19 @@ function pageMeta() {
       if (q && typeof q === 'object') {
         if (typeof q.title === 'string' && q.title) title = q.title
         if (['Easy', 'Medium', 'Hard'].includes(q.difficulty)) difficulty = q.difficulty
+        // Best-effort: the problem page may expose topicTags here; if not,
+        // topics stays [] and the problem shows under "Other".
+        if (Array.isArray(q.topicTags)) topics = q.topicTags
       }
     } catch {
       // malformed JSON — keep document.title fallback
     }
   }
-  return { title, difficulty }
+  return { title, difficulty, topics }
 }
 
 async function recordAccepted(slug) {
-  const { title, difficulty } = pageMeta()
+  const { title, difficulty, topics } = pageMeta()
   try {
     // ponytail: read-modify-write on one key; single armed tab means one
     // writer today. Multi-tab concurrent solves would need a queue (or a
@@ -107,6 +111,7 @@ async function recordAccepted(slug) {
       url: normalizeProblemUrl(slug),
       title,
       difficulty,
+      topics,
       at: new Date().toISOString(),
     })
     await chrome.storage.local.set({ problems })
@@ -137,7 +142,7 @@ new MutationObserver((records) => {
 const SOLVED_QUERY = `query userProgressQuestionList($filters: UserProgressQuestionListInput) {
   userProgressQuestionList(filters: $filters) {
     totalNum
-    questions { titleSlug title difficulty }
+    questions { titleSlug title difficulty topicTags { name slug } }
   }
 }`
 

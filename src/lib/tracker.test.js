@@ -75,11 +75,23 @@ test('first accepted submission creates a complete record scheduled for tomorrow
     title: 'Two Sum',
     url: 'https://leetcode.com/problems/two-sum/',
     difficulty: 'Easy',
+    topics: [],
     firstSolvedAt: iso(2026, 10, 20),
     lastAcceptedAt: iso(2026, 10, 20),
     revisionHistory: [],
     nextRevisionAt: '2026-10-21', // following calendar day
   })
+})
+
+test('a solve with page tags stores normalized topics', () => {
+  const rec = upsertProblem(undefined, ev({ topics: [{ name: 'Two Pointers' }, 'Array'] }))
+  assert.deepEqual(rec.topics, ['Two Pointers', 'Array'])
+})
+
+test('a re-solve without tags preserves topics a sync already stored', () => {
+  const first = { ...upsertProblem(undefined, ev()), topics: ['Two Pointers'] }
+  const again = upsertProblem(first, ev({ at: iso(2026, 10, 25) })) // no topics in event
+  assert.deepEqual(again.topics, ['Two Pointers'])
 })
 
 test('re-solving preserves firstSolvedAt and advances lastAcceptedAt', () => {
