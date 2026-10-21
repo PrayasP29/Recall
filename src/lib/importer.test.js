@@ -89,6 +89,28 @@ test('new imports get null dates, normalized url, and imported flag', () => {
   assert.equal(rec.imported, true)
 })
 
+test('history merge preserves an accepted record while adding imported problems', () => {
+  const accepted = {
+    problemId: 'two-sum',
+    title: 'Two Sum',
+    url: 'https://leetcode.com/problems/two-sum/',
+    difficulty: 'Easy',
+    topics: ['Array'],
+    firstSolvedAt: '2026-10-20T10:00:00.000Z',
+    lastAcceptedAt: '2026-10-22T10:00:00.000Z',
+    revisionHistory: [{ reviewedAt: '2026-10-21T10:00:00.000Z', result: 'remembered' }],
+    nextRevisionAt: '2026-10-29',
+  }
+  const { problems, stats } = mergeImported(
+    { 'two-sum': accepted },
+    [q('two-sum', { title: 'Two Sum', difficulty: 'Easy' }), q('binary-tree-inorder-traversal')],
+  )
+
+  assert.equal(stats.added, 1)
+  assert.equal(problems['binary-tree-inorder-traversal'].problemId, 'binary-tree-inorder-traversal')
+  assert.deepEqual(problems['two-sum'], accepted)
+})
+
 test('duplicate slugs are collapsed and counted as skipped', () => {
   const { problems, stats } = mergeImported({}, [q('a'), q('a'), q('b')])
   assert.deepEqual(Object.keys(problems).sort(), ['a', 'b'])

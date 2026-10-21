@@ -110,13 +110,11 @@ async function fetchPageWithRetry(fetchPage, skip, limit, sleep) {
   throw last
 }
 
-// Orchestrates pagination + merge + scheduling. Injected side effects make
-// auth/partial/storage failures testable without a browser.
-export async function syncHistory({
+// Fetch and validate the complete solved-history response without touching
+// storage. Storage ownership stays with the extension service worker so
+// content scripts in different tabs cannot overwrite one another.
+export async function collectHistory({
   fetchPage,
-  loadProblems,
-  saveProblems,
-  todayDay = toLocalDay(new Date()),
   onProgress,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 }) {
@@ -149,11 +147,27 @@ export async function syncHistory({
 
     if (questions.length >= totalNum) break
     if (fresh === 0 || page >= MAX_PAGES) {
-      partial = true // duplicate-only page or runaway count — stop, report honestly
+      partial = true
       break
     }
     await sleep(REQUEST_DELAY_MS)
   }
+
+  return { status: partial ? 'partial' : 'complete', totalNum, questions }
+}
+
+// Orchestrates pagination + merge + scheduling. Injected side effects make
+// auth/partial/storage failures testable without a browser.
+export async function syncHistory({
+  fetchPage,
+  loadProblems,
+  saveProblems,
+  todayDay = toLocalDay(new Date()),
+  onProgress,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+}) {
+  const collected = await collectHistory({ fetchPage, onProgress, sleep })
+  if (collected.status === 'error') return collected
 
   let stored
   try {
@@ -161,7 +175,7 @@ export async function syncHistory({
   } catch {
     return { status: 'error', code: 'storage', message: ERROR_MESSAGES.storage }
   }
-  const { problems, stats } = mergeImported(stored, questions)
+  const { problems, stats } = mergeImported(stored, collected.questions)
   const merged = assignImportSchedules(problems, todayDay)
   try {
     await saveProblems(merged)
@@ -170,8 +184,8 @@ export async function syncHistory({
   }
 
   return {
-    status: partial ? 'partial' : 'complete',
-    totalNum,
+    status: collected.status,
+    totalNum: collected.totalNum,
     stats,
     problems: merged,
   }

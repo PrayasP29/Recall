@@ -11,16 +11,16 @@
 import {
   classifyVerdict,
   slugFromPathname,
-  normalizeProblemUrl,
   titleFromDocumentTitle,
-  upsertProblem,
 } from './lib/tracker.js'
 import {
   ERROR_MESSAGES,
   ImportError,
+  collectHistory,
   parseSolvedPage,
-  syncHistory,
 } from './lib/importer.js'
+import { toLocalDay } from './lib/revisionScheduler.js'
+import { sendExtensionMessage } from './lib/runtimeMessaging.js'
 
 const ARM_WINDOW_MS = 30_000 // verdict usually lands within seconds; contests queue
 
@@ -102,22 +102,21 @@ function pageMeta() {
 async function recordAccepted(slug) {
   const { title, difficulty, topics } = pageMeta()
   try {
-    // ponytail: read-modify-write on one key; single armed tab means one
-    // writer today. Multi-tab concurrent solves would need a queue (or a
-    // background worker) to avoid clobbering — upgrade if that ever happens.
-    const { problems = {} } = await chrome.storage.local.get('problems')
-    problems[slug] = upsertProblem(problems[slug], {
-      problemId: slug,
-      url: normalizeProblemUrl(slug),
-      title,
-      difficulty,
-      topics,
-      at: new Date().toISOString(),
+    console.info('[Recall content] accepted verdict detected; sending record request', slug)
+    const response = await sendExtensionMessage(chrome.runtime, {
+      type: 'RECALL_RECORD_ACCEPTED',
+      event: {
+        problemId: slug,
+        title,
+        difficulty,
+        topics,
+        at: new Date().toISOString(),
+      },
     })
-    await chrome.storage.local.set({ problems })
-    console.info(`[Recall] recorded accepted submission: ${slug}`)
+    if (response?.status !== 'ok') throw new Error(response?.message ?? 'Storage operation failed.')
+    console.info(`[Recall content] accepted submission saved: ${slug}`)
   } catch (err) {
-    console.warn('[Recall] failed to save submission', err)
+    console.warn('[Recall content] failed to save submission', err?.message ?? err)
   }
 }
 
@@ -189,13 +188,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return
   }
   syncing = true
-  syncHistory({
+  collectHistory({
     fetchPage: fetchSolvedPage,
-    // ponytail: same single-writer assumption as recordAccepted() above.
-    // Concurrent sync + verdict writes would need a queue; upgrade if that
-    // becomes a real scenario.
-    loadProblems: async () => (await chrome.storage.local.get('problems')).problems ?? {},
-    saveProblems: (problems) => chrome.storage.local.set({ problems }),
     onProgress: (p) => {
       try {
         chrome.runtime.sendMessage({ type: 'RECALL_SYNC_PROGRESS', ...p }, () => void chrome.runtime.lastError)
@@ -204,6 +198,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
     },
   })
+    .then(async (result) => {
+      if (result.status === 'error') return result
+      const merged = await sendExtensionMessage(chrome.runtime, {
+        type: 'RECALL_MERGE_HISTORY',
+        questions: result.questions,
+        importStatus: result.status,
+        totalNum: result.totalNum,
+        todayDay: toLocalDay(new Date()),
+      })
+      if (merged?.status !== 'ok') {
+        return { status: 'error', code: 'storage', message: merged?.message ?? ERROR_MESSAGES.storage }
+      }
+      return {
+        status: merged.importStatus,
+        totalNum: merged.totalNum,
+        stats: merged.stats,
+        problems: merged.problems,
+      }
+    })
     .then(sendResponse)
     .catch(() => sendResponse({ status: 'error', code: 'unknown', message: ERROR_MESSAGES.unknown }))
     .finally(() => {
