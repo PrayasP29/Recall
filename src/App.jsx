@@ -9,6 +9,7 @@ import {
 import './App.css'
 import { dayPlan } from './lib/patterns.js'
 import bgImage from './assets/bg.jpeg'
+import logo from './assets/logo.png'
 
 // ponytail: set SUPPORT_URL to the real support page before release.
 // While null the button renders disabled and links nowhere — intentional,
@@ -196,13 +197,22 @@ function App() {
   return (
     <div className="app" style={{ '--bg-image': `url(${bgImage})` }}>
       <header>
-        <h1>Recall</h1>
-        <span className="subtitle">LeetCode revision tracker</span>
+        <img className="brand-mark" src={logo} alt="" />
+        <div className="brand-text">
+          <h1>Recall</h1>
+          <span className="subtitle">LeetCode revision tracker</span>
+        </div>
       </header>
 
       <section className="sync">
-        <button type="button" className="btn" onClick={syncHistory} disabled={sync.status === 'running'}>
-          Sync LeetCode History
+        <button
+          type="button"
+          className="btn"
+          onClick={syncHistory}
+          disabled={sync.status === 'running'}
+          title="Click to sync your LeetCode history"
+        >
+          {sync.status === 'running' ? 'Syncing…' : 'Sync LeetCode History'}
         </button>
         <span className={`sync-status${sync.status === 'error' ? ' error' : ''}`}>{syncText(sync)}</span>
       </section>
