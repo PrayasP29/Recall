@@ -13,7 +13,8 @@ Solving a problem once does not make the approach permanent. Recall keeps track 
 - Schedules imported problems across future days instead of putting the entire history in one queue.
 - Lets you mark due problems **Remembered** or **Forgotten**. Remembered reviews use consecutive intervals of 3, 7, 14, and 30 days; Forgotten reviews are due again the next day.
 - Chooses a daily focus from available DSA pattern tags, with untagged or generic-tag-only problems shown under **Other**.
-- Shows due and overdue questions, while future dates provide a preview of questions scheduled for that day.
+- Builds a rolling seven-day practice plan with at most three questions per day and one primary DSA pattern per day.
+- Uses Monday as a dedicated overdue-review day: it selects up to three of the most overdue questions from one pattern and keeps the rest as a backlog count.
 - Opens due revision problems with a choice to review the current editor or start a fresh attempt.
 - Stores problem records locally in `chrome.storage.local`.
 - Uses a compact branded popup with direct links back to LeetCode problems.
@@ -77,7 +78,7 @@ Separate Vite configurations are required because the popup uses the React modul
 
 The popup displays problem records stored in `chrome.storage.local`; the service worker owns their reads and writes. A record includes the problem slug, title, URL, difficulty, topic tags, accepted-solve timestamps, revision history, and the next revision day.
 
-The content tracker watches LeetCode problem pages for a real Submit click followed by an exact `Accepted` verdict, then sends that one problem to the service worker for a serialized local-storage update. It does not run a full account-history import after a submission. The history importer is a separate, explicit recovery and initial-import path: it runs in the LeetCode tab when the popup sends a sync request, fetches LeetCode's solved-problem GraphQL result, and asks the service worker to merge and schedule the result. The revision scheduler applies the Remembered/Forgotten intervals, while the pattern module selects and groups the daily queue.
+The content tracker watches LeetCode problem pages for a real Submit click followed by an exact `Accepted` verdict, then sends that one problem to the service worker for a serialized local-storage update. It does not run a full account-history import after a submission. The history importer is a separate, explicit recovery and initial-import path: it runs in the LeetCode tab when the popup sends a sync request, fetches LeetCode's solved-problem GraphQL result, and asks the service worker to merge and schedule the result within the rolling import window. The revision scheduler remains the authority for genuine due dates and Remembered/Forgotten intervals; the practice planner derives daily assignments without rewriting those dates or revision history.
 
 ## Privacy
 

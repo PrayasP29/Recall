@@ -279,14 +279,14 @@ test('paginates until totalNum is reached and schedules imports at 3/day', async
   const perDay = {}
   for (const rec of Object.values(saved)) {
     assert.equal(rec.firstSolvedAt, null)
-    assert.ok(rec.nextRevisionAt)
-    perDay[rec.nextRevisionAt] = (perDay[rec.nextRevisionAt] ?? 0) + 1
+    if (rec.nextRevisionAt) perDay[rec.nextRevisionAt] = (perDay[rec.nextRevisionAt] ?? 0) + 1
   }
   for (const [day, count] of Object.entries(perDay)) {
     assert.ok(count <= 3, `${day} has ${count}`)
   }
   assert.ok(perDay[TOMORROW] >= 1)
-  assert.ok(Object.keys(perDay).every((d) => d > TODAY))
+  assert.ok(Object.keys(perDay).every((d) => d > TODAY && d <= addDays(TODAY, 6)))
+  assert.equal(Object.values(saved).filter((rec) => rec.nextRevisionAt === null).length, 102)
 })
 
 test('auth failure aborts without touching storage', async () => {

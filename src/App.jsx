@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { addDays, isDue, toLocalDay } from './lib/revisionScheduler.js'
 import './App.css'
-import { dayPlan } from './lib/patterns.js'
+import { plannedRecords, buildPracticeSchedule } from './lib/practiceScheduler.js'
 import bgImage from './assets/bg.jpeg'
 import { revisionSessionUrl } from './lib/revisionSession.js'
 import logo from './assets/logo.png'
@@ -113,26 +113,15 @@ function App() {
       })
   }, [])
 
-  // Problems shown for the selected day. On/before today this is the due +
-  // overdue queue (isDue); on a future day it is exactly what is scheduled
-  // that day — the same nextRevisionAt match calendarEvents uses internally,
-  // but not month-scoped so day navigation can cross month boundaries.
-  // Past/today: one focus pattern (≤3) + overdue/other safety sections,
-  // derived purely from the day's due+overdue list. Future: exactly what is
-  // scheduled that day, Open-only — the heading is "Scheduled", not a pattern.
-  const plan = useMemo(() => {
-    if (!problems) return { focusTopic: null, focus: [], overdue: [], other: [] }
-    const all = Object.values(problems)
-    if (selected > today) {
-      return {
-        focusTopic: 'Scheduled',
-        focus: all.filter((r) => r.nextRevisionAt === selected),
-        overdue: [],
-        other: [],
-      }
-    }
-    return dayPlan(all, selected)
-  }, [problems, selected, today])
+  // The rolling practice planner owns the three-question/one-pattern queue.
+  // Genuine nextRevisionAt values remain untouched; assignments are derived
+  // for the current seven-day window.
+  const practice = useMemo(
+    () => buildPracticeSchedule(problems ?? {}, today),
+    [problems, today],
+  )
+  const assignment = practice.assignments[selected]
+  const focus = plannedRecords(problems ?? {}, assignment)
 
   // Earliest upcoming revision — explains an empty day ("why no buttons?").
   const nextUp = useMemo(() => {
@@ -178,6 +167,7 @@ function App() {
         setSync({ status: 'error', message: 'Open leetcode.com in a tab first, then retry.' })
         return
       }
+
       const res = await chrome.tabs.sendMessage(tab.id, { type: 'RECALL_SYNC_HISTORY' })
       if (res?.status !== 'complete' && res?.status !== 'partial') {
         setSync({
@@ -198,7 +188,7 @@ function App() {
 
   if (!problems) return <div className="app empty-state">Loading…</div>
 
-  const total = plan.focus.length + plan.overdue.length + plan.other.length
+  const total = focus.length
 
   return (
     <div className="app" style={{ '--bg-image': `url(${bgImage})` }}>
@@ -241,48 +231,15 @@ function App() {
           </p>
         ) : (
           <>
-            {plan.focus.length > 0 && (
+            {focus.length > 0 && (
               <div className="topic-group">
                 <h2 className="topic-heading focus">
-                  {plan.focusTopic || 'Other'}
+                  {assignment.weeklyOverdueReview ? 'Weekly overdue review' : assignment.topic}
                   <span className="count">
-                    {' '}· {plan.focus.length}
-                    {plan.focusTopic !== 'Scheduled'
-                      ? ` ${plan.focus.length === 1 ? 'question' : 'questions'}`
-                      : ''}
+                    {' '}· {focus.length} {focus.length === 1 ? 'question' : 'questions'}
                   </span>
                 </h2>
-                {plan.focus.map((rec) => (
-                  <ProblemCard
-                    key={rec.problemId}
-                    rec={rec}
-                    due={isDue(rec, today)}
-                    busy={busy}
-                    today={today}
-                    onReview={review}
-                  />
-                ))}
-              </div>
-            )}
-            {plan.overdue.length > 0 && (
-              <div className="topic-group">
-                <h2 className="topic-heading secondary">Overdue</h2>
-                {plan.overdue.map((rec) => (
-                  <ProblemCard
-                    key={rec.problemId}
-                    rec={rec}
-                    due={isDue(rec, today)}
-                    busy={busy}
-                    today={today}
-                    onReview={review}
-                  />
-                ))}
-              </div>
-            )}
-            {plan.other.length > 0 && (
-              <div className="topic-group">
-                <h2 className="topic-heading secondary">Other</h2>
-                {plan.other.map((rec) => (
+                {focus.map((rec) => (
                   <ProblemCard
                     key={rec.problemId}
                     rec={rec}
