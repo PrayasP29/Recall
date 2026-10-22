@@ -9,6 +9,7 @@ import { addDays, initialDueDay } from './revisionScheduler.js'
 // problems. A day that already has 2 revisions accepts 1 import; a day with
 // 3+ accepts none. This keeps imports from stacking on a busy queue.
 export const IMPORT_CAP_PER_DAY = 3
+export const IMPORT_SCHEDULE_DAYS = 7
 
 // The day a record will occupy: its existing schedule, or (for a legacy
 // record the popup's withInitialSchedule migration is about to schedule)
@@ -42,16 +43,17 @@ export function assignImportSchedules(problems, todayDay) {
   if (!pending.length) return problems
 
   const next = { ...all }
+  const lastDay = addDays(todayDay, IMPORT_SCHEDULE_DAYS - 1)
   let day = addDays(todayDay, 1) // imports start tomorrow, never today
   let used = 0 // imports placed on `day`
   for (const rec of pending) {
-    // ponytail: total daily load <= 3, so busy existing days delay imports
-    // instead of being overwritten. If "max 3 new imports regardless of load"
-    // is wanted instead, drop the existingLoad term below.
-    while (used + (existingLoad[day] ?? 0) >= IMPORT_CAP_PER_DAY) {
+    // Keep the first-review assignments inside the rolling window. Remaining
+    // imports retain a null date and are picked up by the next sync.
+    while (day <= lastDay && used + (existingLoad[day] ?? 0) >= IMPORT_CAP_PER_DAY) {
       day = addDays(day, 1)
       used = 0
     }
+    if (day > lastDay) break
     next[rec.problemId] = { ...rec, nextRevisionAt: day }
     used++
   }
