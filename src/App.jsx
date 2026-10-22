@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { addDays, isDue, toLocalDay } from './lib/revisionScheduler.js'
 import './App.css'
 import { plannedRecords, buildPracticeSchedule } from './lib/practiceScheduler.js'
-import bgImage from './assets/bg.jpeg'
 import { revisionSessionUrl } from './lib/revisionSession.js'
 import logo from './assets/logo.png'
 
@@ -191,7 +190,7 @@ function App() {
   const total = focus.length
 
   return (
-    <div className="app" style={{ '--bg-image': `url(${bgImage})` }}>
+    <div className="app">
       <header>
         <img className="brand-mark" src={logo} alt="" />
         <div className="brand-text">
