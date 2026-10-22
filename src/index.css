@@ -1,22 +1,23 @@
 :root {
-  /* Dark red-and-black glass theme (Recall popup). */
-  --text: #c4c4c9;        /* secondary */
-  --text-h: #f5f5f5;      /* primary */
-  --bg: #0d0507;          /* deep near-black with a red undertone */
-  --accent: #ff4d5e;      /* restrained crimson */
-  --accent-bg: rgba(255, 77, 94, 0.14);
-  --accent-border: rgba(255, 77, 94, 0.45);
-  --accent-solid: #c1121f;        /* filled button surface; white text is 6.2:1 */
-  --accent-solid-hover: #d01423;
-  --solved: #4ade80;
-  --warning: #fbbf24;
-  --forgotten: #f87171;
+  /* Neutral dark glass theme with a restrained warm accent. */
+  --text: #c7c8ce;
+  --text-h: #f2f3f5;
+  --bg: #090a0e;
+  --accent: #e1c8cc;
+  --accent-bg: rgba(255, 255, 255, 0.1);
+  --accent-border: rgba(255, 255, 255, 0.22);
+  --accent-solid: rgba(255, 255, 255, 0.14);
+  --accent-solid-hover: rgba(255, 255, 255, 0.21);
+  --solved: #9fceb0;
+  --warning: #d7c28a;
+  --forgotten: #d7a4aa;
 
   /* Glass surfaces */
-  --glass-strong: rgba(12, 6, 8, 0.78);   /* problem cards */
-  --glass-weak: rgba(30, 16, 20, 0.42);   /* secondary controls */
-  --glass-border: rgba(255, 255, 255, 0.14);
-  --glass-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  --glass-strong: rgba(15, 17, 23, 0.7);
+  --glass-weak: rgba(34, 36, 44, 0.38);
+  --glass-border: rgba(255, 255, 255, 0.13);
+  --glass-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  --glass-blur: 18px;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
 
