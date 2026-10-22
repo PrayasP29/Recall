@@ -3,6 +3,7 @@ import { addDays, isDue, toLocalDay } from './lib/revisionScheduler.js'
 import './App.css'
 import { dayPlan } from './lib/patterns.js'
 import bgImage from './assets/bg.jpeg'
+import { revisionSessionUrl } from './lib/revisionSession.js'
 import logo from './assets/logo.png'
 
 // ponytail: set SUPPORT_URL to the real support page before release.
@@ -35,9 +36,10 @@ function syncText(sync) {
   return `${head} - ${s.discovered} of ${sync.totalNum} found: ${parts.join(', ')}.`
 }
 
-function ProblemLink({ rec }) {
+function ProblemLink({ rec, revision }) {
+  const href = revision ? revisionSessionUrl(rec.url) : rec.url
   return (
-    <a className="open" href={rec.url} target="_blank" rel="noreferrer">
+    <a className="open" href={href ?? rec.url} target="_blank" rel="noreferrer">
       Open
     </a>
   )
@@ -62,7 +64,7 @@ function ProblemCard({ rec, due, busy, today, onReview }) {
               : 'Due today'
             : `Scheduled ${fmtDay(rec.nextRevisionAt)}`}
         </span>
-        <ProblemLink rec={rec} />
+        <ProblemLink rec={rec} revision={due} />
       </div>
       {due ? (
         <div className="actions">

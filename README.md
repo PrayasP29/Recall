@@ -14,6 +14,7 @@ Solving a problem once does not make the approach permanent. Recall keeps track 
 - Lets you mark due problems **Remembered** or **Forgotten**. Remembered reviews use consecutive intervals of 3, 7, 14, and 30 days; Forgotten reviews are due again the next day.
 - Chooses a daily focus from available DSA pattern tags, with untagged or generic-tag-only problems shown under **Other**.
 - Shows due and overdue questions, while future dates provide a preview of questions scheduled for that day.
+- Opens due revision problems with a choice to review the current editor or start a fresh attempt.
 - Stores problem records locally in `chrome.storage.local`.
 - Uses a compact branded popup with direct links back to LeetCode problems.
 
@@ -27,6 +28,8 @@ Solving a problem once does not make the approach permanent. Recall keeps track 
 6. Return later to continue the revision queue.
 
 After the initial import, future accepted submissions are tracked directly on the LeetCode problem page: a real **Submit** click followed by an observable `Accepted` result adds the problem locally or updates its existing record. You do not need to run a full history sync after every successful submission. The sync button remains available to recover from a missed submission, reinstall, or lost local history.
+
+When you open a due problem from Recall, the revision session offers **See Previous Code**, which leaves the editor untouched. **Start Fresh Attempt** asks for confirmation, then invokes LeetCode's native **Reset to default code definition** control for the selected language. If Recall cannot identify exactly one enabled reset control, it leaves the editor untouched and reports the failure. After a successful reset, Recall offers a page-session **Recall Recovery** control that can invoke LeetCode's native **Retrieve last submitted code** action after a second confirmation.
 
 ## Installation for Users
 
@@ -95,6 +98,7 @@ See [PRIVACY.md](PRIVACY.md) for the detailed privacy policy.
 - History sync requires a signed-in LeetCode tab and must be started by clicking the sync button; it does not run automatically in the background.
 - Automatic tracking requires Recall's content script to be active on the problem page. If LeetCode was already open when the extension was installed or reloaded, reload that tab first.
 - Automatic tracking depends on LeetCode's page interface: Recall needs to observe the real Submit action and an exact `Accepted` verdict. A changed, hidden, or otherwise unobservable result can be missed and should be recovered with **Sync LeetCode History**.
+- Starting a fresh attempt may replace the current draft for the selected language through LeetCode's native reset control. Recall does not click **Retrieve last submitted code**, reset other languages, or submit code automatically.
 - Recall is not currently available through the Chrome Web Store.
 - **Support Recall** is currently a disabled placeholder because `SUPPORT_URL` is not configured.
 
