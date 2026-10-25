@@ -1,5 +1,5 @@
 import { addDays } from './revisionScheduler.js'
-import { patternTopic, dueOrder, selectDailyPattern } from './patterns.js'
+import { OTHER, patternTopic, dueOrder } from './patterns.js'
 
 export const PRACTICE_DAYS = 7
 export const PRACTICE_CAP = 3
@@ -28,65 +28,15 @@ function candidatesForDay(records, day, weeklyReviewDay) {
   return records.filter((record) => record.nextRevisionAt === day)
 }
 
-function isPendingImport(record) {
-  return record.imported === true && !record.nextRevisionAt && !(record.revisionHistory?.length)
-}
-
 function candidateViews(records, day, today, weeklyReviewDay) {
   const scheduled = candidatesForDay(records, day, weeklyReviewDay)
-  if (day === today || day === weeklyReviewDay) return { scheduled, pending: [] }
-  const pending = records
-    .filter(isPendingImport)
-    .map((record) => ({ ...record, nextRevisionAt: day, plannedDate: day }))
-  return { scheduled, pending }
-}
-
-function choosePattern(records, day, previousTopic, weeklyReview) {
-  const topics = new Set(records.map((record) => patternTopic(record)).filter(Boolean))
-  if (!topics.size) return { topic: null, reason: 'no usable DSA pattern candidates', baseTopic: null }
-  let selected
-  let baseTopic
-  if (weeklyReview) {
-    const oldestDue = [...records]
-      .filter((record) => record.nextRevisionAt)
-      .sort((a, b) => a.nextRevisionAt.localeCompare(b.nextRevisionAt) || a.problemId.localeCompare(b.problemId))[0]
-      ?.nextRevisionAt
-    const oldestTopics = [...topics].filter((topic) =>
-      records.some((record) => patternTopic(record) === topic && record.nextRevisionAt === oldestDue),
-    )
-    selected = oldestTopics.sort()[0] ?? [...topics].sort()[0]
-    baseTopic = selected
-  } else {
-    selected = selectDailyPattern(records, day)
-    baseTopic = selected
-  }
-  if (selected !== previousTopic || topics.size === 1) {
+  if (day === today || day === weeklyReviewDay) {
     return {
-      topic: selected,
-      baseTopic,
-      reason: weeklyReview
-        ? 'oldest overdue pattern selected'
-        : 'normal pattern ranking selected',
+      scheduled: records.filter((record) => record.nextRevisionAt && record.nextRevisionAt <= day),
+      pending: [],
     }
   }
-  const candidateCounts = new Map(
-    [...topics].map((topic) => [
-      topic,
-      records.filter((record) => patternTopic(record) === topic).length,
-    ]),
-  )
-  const selectedCount = candidateCounts.get(selected) ?? 0
-  const alternative = [...topics]
-    .filter((topic) => topic !== previousTopic && (candidateCounts.get(topic) ?? 0) >= selectedCount)
-    .sort()
-  const alternativeTopic = alternative[0] ?? selected
-  return {
-    topic: alternativeTopic,
-    baseTopic,
-    reason: alternativeTopic === selected
-      ? 'previous pattern retained because alternatives cannot fill more capacity'
-      : 'previous pattern avoided; strongest alternative selected',
-  }
+  return { scheduled, pending: [] }
 }
 
 export function buildPracticeSchedule(problems, today) {
@@ -94,26 +44,21 @@ export function buildPracticeSchedule(problems, today) {
   const monday = nextWeekStart(today)
   const assignments = {}
   const assigned = new Set()
-  let previousTopic = null
   for (let offset = 0; offset < PRACTICE_DAYS; offset++) {
     const day = addDays(today, offset)
     const views = candidateViews(records, day, today, monday)
     const scheduled = views.scheduled.filter((record) => !assigned.has(record.problemId))
     const pending = views.pending.filter((record) => !assigned.has(record.problemId))
     const candidates = [...scheduled, ...pending]
-    const choice = choosePattern(
-      scheduled.length ? scheduled : candidates,
-      day,
-      previousTopic,
-      day === monday,
-    )
-    const selected = choice.topic
-      ? dueOrder(candidates.filter((record) => patternTopic(record) === choice.topic)).slice(0, PRACTICE_CAP)
-      : []
+    const selected = dueOrder(candidates).slice(0, PRACTICE_CAP)
+    const selectedTopics = new Set(selected.map((record) => patternTopic(record)).filter(Boolean))
+    const selectedTopic = selectedTopics.size === 1 ? [...selectedTopics][0] : null
     selected.forEach((record) => assigned.add(record.problemId))
     assignments[day] = {
       date: day,
-      topic: choice.topic,
+      // No usable pattern means generic/untagged questions. The README calls
+      // this group Other; without it those questions were invisible.
+      topic: selectedTopic ?? (selected.length ? OTHER : null),
       problemIds: selected.map((record) => record.problemId),
       plannedDates: Object.fromEntries(
         selected
@@ -122,7 +67,6 @@ export function buildPracticeSchedule(problems, today) {
       ),
       weeklyOverdueReview: day === monday,
     }
-    if (choice.topic) previousTopic = choice.topic
   }
 
   const backlog = records.filter((record) =>

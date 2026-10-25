@@ -1,6 +1,6 @@
 # Recall
 
-Recall is an open-source Chrome extension that helps LeetCode users revisit solved problems with spaced repetition and pattern-focused daily practice.
+Recall is an open-source Chrome extension that helps LeetCode users revisit solved problems with a small, random daily practice selection.
 
 <h2 align="center">Screenshots</h2>
 
@@ -18,11 +18,11 @@ Solving a problem once does not make the approach permanent. Recall keeps track 
 
 - Tracks accepted LeetCode submissions from problem pages.
 - Imports solved problems through the explicit **Sync LeetCode History** button.
-- Schedules imported problems across future days instead of putting the entire history in one queue.
-- Lets you mark due problems **Remembered** or **Forgotten**. Remembered reviews use consecutive intervals of 3, 7, 14, and 30 days; Forgotten reviews are due again the next day.
-- Chooses a daily focus from available DSA pattern tags, with untagged or generic-tag-only problems shown under **Other**.
-- Builds a rolling seven-day practice plan with at most three questions per day and one primary DSA pattern per day.
-- Uses Monday as a dedicated overdue-review day: it selects up to three of the most overdue questions from one pattern and keeps the rest as a backlog count.
+- Selects up to two eligible solved problems randomly for each local calendar day and persists that selection.
+- Avoids problems selected in the previous seven days when alternatives exist, then relaxes that restriction for small pools.
+- Makes a newly accepted problem eligible three local calendar days after its first solve.
+- Keeps skipped days from creating an accumulating backlog or priority.
+- Shows untagged or generic-tag-only problems under **Other**.
 - Opens due revision problems with a choice to review the current editor or start a fresh attempt.
 - Stores problem records locally in `chrome.storage.local`.
 - Uses a compact branded popup with direct links back to LeetCode problems.
@@ -32,13 +32,13 @@ Solving a problem once does not make the approach permanent. Recall keeps track 
 1. Install or load the extension.
 2. Open `leetcode.com` in a tab and sign in. If the tab was already open when Recall was installed or reloaded, reload the tab so Chrome can inject the content script.
 3. Click **Sync LeetCode History** in the Recall popup to import your existing solved-problem history. Sync is explicit; it does not run automatically.
-4. Review the questions scheduled for today.
-5. Open a problem when needed, then mark it **Remembered** or **Forgotten**.
-6. Return later to continue the revision queue.
+4. Review today's persisted random selection.
+5. Open a problem when needed and practice it on LeetCode.
+6. Return later for another persisted daily selection.
 
 After the initial import, future accepted submissions are tracked directly on the LeetCode problem page: a real **Submit** click followed by an observable `Accepted` result adds the problem locally or updates its existing record. You do not need to run a full history sync after every successful submission. The sync button remains available to recover from a missed submission, reinstall, or lost local history.
 
-When you open a due problem from Recall, the revision session offers **See Previous Code**, which leaves the editor untouched. **Start Fresh Attempt** asks for confirmation, then invokes LeetCode's native **Reset to default code definition** control for the selected language. If Recall cannot identify exactly one enabled reset control, it leaves the editor untouched and reports the failure. After a successful reset, Recall offers a page-session **Recall Recovery** control that can invoke LeetCode's native **Retrieve last submitted code** action after a second confirmation.
+When you open a problem from Recall, the revision session offers **See Previous Code**, which leaves the editor untouched. **Start Fresh Attempt** asks for confirmation, then invokes LeetCode's native **Reset to default code definition** control for the selected language. If Recall cannot identify exactly one enabled reset control, it leaves the editor untouched and reports the failure. After a successful reset, Recall offers a page-session **Recall Recovery** control that can invoke LeetCode's native **Retrieve last submitted code** action after a second confirmation.
 
 ## Installation for Users
 
@@ -84,9 +84,9 @@ Separate Vite configurations are required because the popup uses the React modul
 
 ## Architecture and Data
 
-The popup displays problem records stored in `chrome.storage.local`; the service worker owns their reads and writes. A record includes the problem slug, title, URL, difficulty, topic tags, accepted-solve timestamps, revision history, and the next revision day.
+The popup displays problem records stored in `chrome.storage.local`; the service worker owns their reads and writes. A record includes the problem slug, title, URL, difficulty, topic tags, accepted-solve timestamps, revision history, and an eligibility day. Daily selections are stored separately under local `YYYY-MM-DD` keys so reopening the popup or restarting Chrome does not change today's questions.
 
-The content tracker watches LeetCode problem pages for a real Submit click followed by an exact `Accepted` verdict, then sends that one problem to the service worker for a serialized local-storage update. It does not run a full account-history import after a submission. The history importer is a separate, explicit recovery and initial-import path: it runs in the LeetCode tab when the popup sends a sync request, fetches LeetCode's solved-problem GraphQL result, and asks the service worker to merge and schedule the result within the rolling import window. The revision scheduler remains the authority for genuine due dates and Remembered/Forgotten intervals; the practice planner derives daily assignments without rewriting those dates or revision history.
+The content tracker watches LeetCode problem pages for a real Submit click followed by an exact `Accepted` verdict, then sends that one problem to the service worker for a serialized local-storage update. It does not run a full account-history import after a submission. The history importer is a separate, explicit recovery and initial-import path: it runs in the LeetCode tab when the popup sends a sync request, fetches LeetCode's solved-problem GraphQL result, and asks the service worker to merge the result. Imported records without a verified solve timestamp become eligible on the sync date; valid later eligibility dates are preserved. Remembered/Forgotten feedback continues to update revision history and eligibility intervals, while daily selection remains the only source of the popup queue.
 
 ## Privacy
 
@@ -95,7 +95,7 @@ See [PRIVACY.md](PRIVACY.md) for the detailed privacy policy.
 - Problem records are stored locally in Chrome's `chrome.storage.local`; Recall has no account system or backend.
 - Recall does not include telemetry or analytics.
 - On LeetCode problem pages, the content script reads the current problem URL, page title, and best-effort difficulty/topic metadata to recognize accepted submissions.
-- When you explicitly click **Sync LeetCode History**, Recall reads the solved-problem list exposed by LeetCode, including slugs, titles, difficulty, and topic tags.
+- When you explicitly click **Sync LeetCode History**, Recall reads the solved-problem list exposed by LeetCode, including slugs, titles, difficulty, and topic tags, then refreshes today's persisted selection in the popup.
 - The sync request reads the `csrftoken` cookie locally in the LeetCode tab and sends it as the `x-csrftoken` header only to `https://leetcode.com/graphql/`. The token is not stored or logged.
 - The extension communicates with LeetCode for tracking context and history sync. It does not send problem records or usage data to any other service.
 - The `storage` permission is used for local problem records. The LeetCode host permission allows the content script and the explicit history-sync request to operate on LeetCode pages.

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { isAcceptedEvent, isHistoryMerge, isReviewRequest } from './messageValidation.js'
+import { isAcceptedEvent, isHistoryMerge } from './messageValidation.js'
 
 test('accepted events require a valid problem payload', () => {
   const event = {
@@ -25,11 +25,4 @@ test('history merges require validated status and scheduling inputs', () => {
   assert.equal(isHistoryMerge(merge), true)
   assert.equal(isHistoryMerge({ ...merge, importStatus: 'error' }), false)
   assert.equal(isHistoryMerge({ ...merge, totalNum: -1 }), false)
-})
-
-test('review requests only accept supported results and slugs', () => {
-  assert.equal(isReviewRequest({ problemId: 'two-sum', result: 'remembered' }), true)
-  assert.equal(isReviewRequest({ problemId: 'two-sum', result: 'forgotten' }), true)
-  assert.equal(isReviewRequest({ problemId: 'two-sum', result: 'other' }), false)
-  assert.equal(isReviewRequest({ problemId: '__proto__', result: 'forgotten' }), false)
 })

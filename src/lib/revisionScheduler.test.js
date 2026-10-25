@@ -5,7 +5,7 @@ import {
   addDays,
   initialDueDay,
   withInitialSchedule,
-  applyRevision,
+  reconcileSchedules,
   isDue,
   dueProblems,
   calendarEvents,
@@ -41,57 +41,18 @@ test('addDays crosses month, year, and leap boundaries correctly', () => {
   assert.equal(addDays('2026-01-15', -5), '2026-01-10')
 })
 
-test('initial revision is due the following calendar day', () => {
-  assert.equal(initialDueDay(iso(2026, 10, 20, 23)), '2026-10-21') // late-night solve still counts as that day
+test('initial revision is due three local calendar days later', () => {
+  assert.equal(initialDueDay(iso(2026, 10, 20, 23)), '2026-10-23') // late-night solve still counts as that day
 })
 
 // --- scheduling rules -----------------------------------------------------
-
-test('remembered intervals: 3, 7, 14, then 30 days by consecutive streak', () => {
-  let r = rec()
-  const due = (result, y, m, d) => {
-    r = applyRevision(r, result, iso(y, m, d, 9))
-    return r.nextRevisionAt
-  }
-  assert.equal(due('remembered', 2026, 10, 21), '2026-10-24') // streak 1: +3
-  assert.equal(due('remembered', 2026, 10, 24), '2026-10-31') // streak 2: +7
-  assert.equal(due('remembered', 2026, 10, 31), '2026-11-14') // streak 3: +14
-  assert.equal(due('remembered', 2026, 11, 14), '2026-12-14') // streak 4: +30
-  assert.equal(due('remembered', 2026, 12, 14), '2027-01-13') // streak 5: still +30
-})
-
-test('forgotten: due next day and the streak resets', () => {
-  let r = applyRevision(rec(), 'remembered', iso(2026, 10, 21, 9)) // streak 1
-  r = applyRevision(r, 'forgotten', iso(2026, 10, 24, 9))
-  assert.equal(r.nextRevisionAt, '2026-10-25') // following day
-  r = applyRevision(r, 'remembered', iso(2026, 10, 25, 9))
-  assert.equal(r.nextRevisionAt, '2026-10-28') // streak restarted at 3 days
-})
-
-test('revision entries carry reviewedAt/result/nextRevisionAt and history is preserved', () => {
-  const r = applyRevision(rec(), 'remembered', iso(2026, 10, 21, 9))
-  assert.deepEqual(r.revisionHistory, [
-    { reviewedAt: iso(2026, 10, 21, 9), result: 'remembered', nextRevisionAt: '2026-10-24' },
-  ])
-  const r2 = applyRevision(r, 'forgotten', iso(2026, 10, 24, 9))
-  assert.equal(r2.revisionHistory.length, 2)
-  assert.equal(r2.revisionHistory[0].reviewedAt, iso(2026, 10, 21, 9))
-})
-
-test('repeated attempts with the same reviewedAt are ignored (double-click guard)', () => {
-  const at = iso(2026, 10, 21, 9)
-  const once = applyRevision(rec(), 'remembered', at)
-  const twice = applyRevision(once, 'remembered', at)
-  assert.equal(twice, once) // same object identity = nothing recorded
-  assert.equal(once.revisionHistory.length, 1)
-})
 
 // --- legacy migration -----------------------------------------------------
 
 test('withInitialSchedule schedules null nextRevisionAt from firstSolvedAt', () => {
   const legacy = rec({ nextRevisionAt: null })
   const migrated = withInitialSchedule(legacy)
-  assert.equal(migrated.nextRevisionAt, '2026-10-21')
+  assert.equal(migrated.nextRevisionAt, '2026-10-23')
   assert.equal(migrated.firstSolvedAt, legacy.firstSolvedAt) // untouched
 })
 
@@ -100,6 +61,32 @@ test('withInitialSchedule is a no-op for scheduled or incomplete records', () =>
   assert.equal(withInitialSchedule(scheduled), scheduled) // identity
   const noSolveDate = rec({ firstSolvedAt: null, nextRevisionAt: null })
   assert.equal(withInitialSchedule(noSolveDate), noSolveDate)
+})
+
+test('reconciliation caps legacy clusters without deleting history', () => {
+  const history = [{ reviewedAt: iso(2026, 10, 1, 9), result: 'forgotten', nextRevisionAt: '2026-10-20' }]
+  const problems = Object.fromEntries(
+    ['a', 'b', 'c', 'd'].map((problemId) => [
+      problemId,
+      rec({ problemId, nextRevisionAt: '2026-10-20', revisionHistory: history }),
+    ]),
+  )
+  const { problems: migrated } = reconcileSchedules(problems)
+  const days = Object.values(migrated).map((record) => record.nextRevisionAt)
+  assert.deepEqual(days, ['2026-10-20', '2026-10-20', '2026-10-20', '2026-10-21'])
+  assert.deepEqual(migrated.a.revisionHistory, history)
+  assert.deepEqual(reconcileSchedules(migrated).problems, migrated)
+})
+
+test('reconciliation repairs a 1970 date only from reliable existing data', () => {
+  const repairable = rec({ nextRevisionAt: '1970-01-02' })
+  const ambiguous = rec({ problemId: 'ambiguous', firstSolvedAt: null, nextRevisionAt: '1970-01-02' })
+  const result = reconcileSchedules({ repairable, ambiguous })
+  assert.equal(result.problems.repairable.nextRevisionAt, '2026-10-23')
+  assert.equal(result.problems.ambiguous.nextRevisionAt, '1970-01-02')
+  assert.deepEqual(result.migrationIssues, [
+    { problemId: 'ambiguous', reason: 'invalid nextRevisionAt with no reliable firstSolvedAt' },
+  ])
 })
 
 // --- due queue ------------------------------------------------------------

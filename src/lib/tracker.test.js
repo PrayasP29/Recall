@@ -6,6 +6,7 @@ import {
   normalizeProblemUrl,
   titleFromDocumentTitle,
   upsertProblem,
+  recordAccepted,
 } from './tracker.js'
 
 // Timestamps are built from LOCAL date components so tests are deterministic
@@ -68,7 +69,7 @@ const ev = (over = {}) => ({
   ...over,
 })
 
-test('first accepted submission creates a complete record scheduled for tomorrow', () => {
+test('first accepted submission creates a complete record scheduled three days later', () => {
   const rec = upsertProblem(undefined, ev())
   assert.deepEqual(rec, {
     problemId: 'two-sum',
@@ -79,7 +80,8 @@ test('first accepted submission creates a complete record scheduled for tomorrow
     firstSolvedAt: iso(2026, 10, 20),
     lastAcceptedAt: iso(2026, 10, 20),
     revisionHistory: [],
-    nextRevisionAt: '2026-10-21', // following calendar day
+    eligibilityDate: '2026-10-23',
+    nextRevisionAt: '2026-10-23', // three local calendar days later
   })
 })
 
@@ -130,5 +132,73 @@ test('re-solving preserves revision history and the revision schedule', () => {
 test('legacy record with null nextRevisionAt is scheduled from firstSolvedAt', () => {
   const legacy = { ...upsertProblem(undefined, ev()), nextRevisionAt: null }
   const migrated = upsertProblem(legacy, ev({ at: iso(2026, 11, 2) }))
-  assert.equal(migrated.nextRevisionAt, '2026-10-21') // from firstSolvedAt (Oct 20), not the re-solve
+  assert.equal(migrated.nextRevisionAt, '2026-10-23') // from firstSolvedAt (Oct 20), not the re-solve
+})
+
+test('six solves on one day share the same three-day eligibility date', () => {
+  let problems = {}
+  for (let index = 0; index < 6; index++) {
+    const problemId = `q${index}`
+    const event = ev({
+      problemId,
+      url: normalizeProblemUrl(problemId),
+      at: iso(2026, 10, 19),
+    })
+    problems = recordAccepted(problems, event)
+  }
+
+  const dueDays = Object.values(problems).map((record) => record.nextRevisionAt)
+  assert.deepEqual(dueDays, Array(6).fill('2026-10-22'))
+})
+
+test('eligibility crosses year boundaries', () => {
+  let problems = {}
+  for (let index = 0; index < 6; index++) {
+    const problemId = `q${index}`
+    problems = recordAccepted(problems, ev({
+      problemId,
+      url: normalizeProblemUrl(problemId),
+      at: iso(2026, 12, 31),
+    }))
+  }
+
+  const dueDays = Object.values(problems).map((record) => record.nextRevisionAt)
+  assert.deepEqual(dueDays, Array(6).fill('2027-01-03'))
+})
+
+test('new solves do not change existing eligibility dates', () => {
+  const existing = Object.fromEntries(
+    ['a', 'b', 'c'].map((problemId) => [
+      problemId,
+      { ...upsertProblem(undefined, ev({ problemId, url: normalizeProblemUrl(problemId) })), nextRevisionAt: '2026-10-23' },
+    ]),
+  )
+  const next = recordAccepted(existing, ev({ problemId: 'new', url: normalizeProblemUrl('new'), at: iso(2026, 10, 20) }))
+  assert.equal(next.new.nextRevisionAt, '2026-10-23')
+  assert.equal(next.a.nextRevisionAt, '2026-10-23')
+})
+
+test('recordAccepted never moves an existing stored schedule', () => {
+  const scheduled = { ...upsertProblem(undefined, ev()), nextRevisionAt: '2026-10-24' }
+  const next = recordAccepted({ 'two-sum': scheduled }, ev({ at: iso(2026, 10, 26) }))
+  assert.equal(next['two-sum'].nextRevisionAt, '2026-10-24')
+  assert.equal(next['two-sum'].lastAcceptedAt, iso(2026, 10, 26))
+})
+
+test('a pending imported record gets a real date from the accepted event, not 1970', () => {
+  const imported = {
+    problemId: 'two-sum',
+    url: normalizeProblemUrl('two-sum'),
+    title: null,
+    difficulty: null,
+    topics: [],
+    firstSolvedAt: null,
+    lastAcceptedAt: null,
+    revisionHistory: [],
+    nextRevisionAt: null,
+    imported: true,
+  }
+  const next = recordAccepted({ 'two-sum': imported }, ev({ at: iso(2026, 10, 20) }))
+  assert.equal(next['two-sum'].firstSolvedAt, iso(2026, 10, 20))
+  assert.equal(next['two-sum'].nextRevisionAt, '2026-10-23')
 })

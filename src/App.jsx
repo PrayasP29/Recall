@@ -1,23 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { addDays, isDue, toLocalDay } from './lib/revisionScheduler.js'
+import { toLocalDay } from './lib/revisionScheduler.js'
 import './App.css'
-import { plannedRecords, buildPracticeSchedule } from './lib/practiceScheduler.js'
+import { primaryTopic } from './lib/patterns.js'
 import { revisionSessionUrl } from './lib/revisionSession.js'
+import { historySyncState } from './lib/historySync.js'
 import logo from './assets/logo.png'
 
 // ponytail: set SUPPORT_URL to the real support page before release.
 // While null the button renders disabled and links nowhere — intentional,
 // so we never ship a placeholder URL that looks like a real destination.
 const SUPPORT_URL = null
-
-const fmtDay = (day) => {
-  const [y, m, d] = day.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-  })
-}
 
 const label = (rec) => rec.title || rec.problemId
 
@@ -44,9 +36,8 @@ function ProblemLink({ rec, revision }) {
   )
 }
 
-// One problem card, reused by every section. `due` gates the review actions;
-// future-day cards render Open-only.
-function ProblemCard({ rec, due, busy, today, onReview }) {
+// One problem card for today's persisted selection.
+function ProblemCard({ rec }) {
   return (
     <div className="card">
       <div className="card-top">
@@ -56,35 +47,16 @@ function ProblemCard({ rec, due, busy, today, onReview }) {
         )}
       </div>
       <div className="card-bottom">
-        <span className={due && rec.nextRevisionAt < today ? 'overdue' : 'due'}>
-          {due
-            ? rec.nextRevisionAt < today
-              ? `Overdue — was due ${fmtDay(rec.nextRevisionAt)}`
-              : 'Due today'
-            : `Scheduled ${fmtDay(rec.nextRevisionAt)}`}
-        </span>
-        <ProblemLink rec={rec} revision={due} />
+        <span className="due">{primaryTopic(rec) ?? 'Other'}</span>
+        <ProblemLink rec={rec} revision />
       </div>
-      {due ? (
-        <div className="actions">
-          <button type="button" className="btn remembered" disabled={busy} onClick={() => onReview(rec.problemId, 'remembered')}>
-            Remembered
-          </button>
-          <button type="button" className="btn forgotten" disabled={busy} onClick={() => onReview(rec.problemId, 'forgotten')}>
-            Forgotten
-          </button>
-        </div>
-      ) : null}
     </div>
   )
 }
 
 function App() {
   const [problems, setProblems] = useState(null) // null = still loading
-  // ponytail: "today" is fixed when the popup opens; reopen it after midnight.
-  const [today] = useState(() => toLocalDay(new Date()))
-  const [selected, setSelected] = useState(() => toLocalDay(new Date()))
-  const [busy, setBusy] = useState(false)
+  const [selection, setSelection] = useState([])
   const [sync, setSync] = useState({ status: 'idle' })
 
   useEffect(() => {
@@ -97,10 +69,18 @@ function App() {
   }, [])
 
   useEffect(() => {
-    chrome.runtime.sendMessage({ type: 'RECALL_MIGRATE_PROBLEMS' })
+    const todayDay = toLocalDay(new Date())
+    chrome.runtime.sendMessage({ type: 'RECALL_MIGRATE_PROBLEMS', todayDay })
       .then((response) => {
         if (response?.status === 'ok') {
           setProblems(response.problems)
+          setSelection(response.selection ?? [])
+          if (response.migrationIssues?.length) {
+            setSync({
+              status: 'error',
+              message: `${response.migrationIssues.length} stored record${response.migrationIssues.length === 1 ? '' : 's'} need manual schedule recovery.`,
+            })
+          }
         } else {
           setProblems({})
           setSync({ status: 'error', message: response?.message ?? 'Could not load stored problems.' })
@@ -112,49 +92,10 @@ function App() {
       })
   }, [])
 
-  // The rolling practice planner owns the three-question/one-pattern queue.
-  // Genuine nextRevisionAt values remain untouched; assignments are derived
-  // for the current seven-day window.
-  const practice = useMemo(
-    () => buildPracticeSchedule(problems ?? {}, today),
-    [problems, today],
+  const focus = useMemo(
+    () => selection.map((id) => problems?.[id]).filter(Boolean),
+    [problems, selection],
   )
-  const assignment = practice.assignments[selected]
-  const focus = plannedRecords(problems ?? {}, assignment)
-
-  // Earliest upcoming revision — explains an empty day ("why no buttons?").
-  const nextUp = useMemo(() => {
-    if (!problems) return null
-    const days = Object.values(problems)
-      .map((r) => r.nextRevisionAt)
-      .filter((d) => d && d > today)
-    return days.length ? days.sort()[0] : null
-  }, [problems, today])
-
-  async function review(id, result) {
-    if (busy) return
-    setBusy(true)
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'RECALL_REVIEW_PROBLEM',
-        problemId: id,
-        result,
-      })
-      if (response?.status === 'ok') {
-        setProblems(response.problems)
-      } else {
-        setSync({ status: 'error', message: response?.message ?? 'Could not save review.' })
-      }
-    } catch {
-      setSync({ status: 'error', message: 'Could not save review.' })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  function shiftDay(delta) {
-    setSelected((d) => addDays(d, delta))
-  }
 
   async function syncHistory() {
     if (sync.status === 'running') return
@@ -175,7 +116,16 @@ function App() {
         })
         return
       }
-      if (res.problems) setProblems(res.problems)
+      const nextState = historySyncState(res)
+      if (!nextState) {
+        setSync({
+          status: 'error',
+          message: 'Sync failed. Reload the LeetCode tab and retry.',
+        })
+        return
+      }
+      setProblems(nextState.problems)
+      setSelection(nextState.selection)
       setSync(res)
     } catch {
       setSync({
@@ -188,7 +138,6 @@ function App() {
   if (!problems) return <div className="app empty-state">Loading…</div>
 
   const total = focus.length
-
   return (
     <div className="app">
       <header>
@@ -214,26 +163,19 @@ function App() {
 
       <section>
         <div className="day-nav">
-          <button type="button" className="btn nav" onClick={() => shiftDay(-1)} aria-label="Previous day">
-            ‹
-          </button>
-          <span className="day-label">{selected === today ? 'Today' : fmtDay(selected)}</span>
-          <button type="button" className="btn nav" onClick={() => shiftDay(1)} aria-label="Next day">
-            ›
-          </button>
+          <span className="day-label">Today</span>
         </div>
 
         {total === 0 ? (
           <p className="empty-state">
-            {selected === today ? 'Nothing due today.' : 'No revisions scheduled this day.'}
-            {nextUp ? ` Next revision: ${fmtDay(nextUp)}.` : ''}
+            {Object.keys(problems).length ? 'No eligible questions today.' : 'No solved questions yet.'}
           </p>
         ) : (
           <>
             {focus.length > 0 && (
               <div className="topic-group">
                 <h2 className="topic-heading focus">
-                  {assignment.weeklyOverdueReview ? 'Weekly overdue review' : assignment.topic}
+                  Today's review
                   <span className="count">
                     {' '}· {focus.length} {focus.length === 1 ? 'question' : 'questions'}
                   </span>
@@ -242,10 +184,6 @@ function App() {
                   <ProblemCard
                     key={rec.problemId}
                     rec={rec}
-                    due={isDue(rec, today)}
-                    busy={busy}
-                    today={today}
-                    onReview={review}
                   />
                 ))}
               </div>
