@@ -3,6 +3,7 @@ import { toLocalDay } from './lib/revisionScheduler.js'
 import './App.css'
 import { primaryTopic } from './lib/patterns.js'
 import { revisionSessionUrl } from './lib/revisionSession.js'
+import { historySyncState } from './lib/historySync.js'
 import logo from './assets/logo.png'
 
 // ponytail: set SUPPORT_URL to the real support page before release.
@@ -115,7 +116,16 @@ function App() {
         })
         return
       }
-      if (res.problems) setProblems(res.problems)
+      const nextState = historySyncState(res)
+      if (!nextState) {
+        setSync({
+          status: 'error',
+          message: 'Sync failed. Reload the LeetCode tab and retry.',
+        })
+        return
+      }
+      setProblems(nextState.problems)
+      setSelection(nextState.selection)
       setSync(res)
     } catch {
       setSync({

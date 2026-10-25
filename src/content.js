@@ -23,6 +23,7 @@ import { toLocalDay } from './lib/revisionScheduler.js'
 import { sendExtensionMessage } from './lib/runtimeMessaging.js'
 import { isRevisionSessionUrl } from './lib/revisionSession.js'
 import { findEditorToolbar, resetCurrentEditor } from './lib/revisionReset.js'
+import { historySyncResponse } from './lib/historySync.js'
 import {
   recoveryActionFromTarget,
   retrievePreviousCode,
@@ -673,12 +674,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (merged?.status !== 'ok') {
         return { status: 'error', code: 'storage', message: merged?.message ?? ERROR_MESSAGES.storage }
       }
-      return {
-        status: merged.importStatus,
-        totalNum: merged.totalNum,
-        stats: merged.stats,
-        problems: merged.problems,
-      }
+      return historySyncResponse(merged)
     })
     .then(sendResponse)
     .catch(() => sendResponse({ status: 'error', code: 'unknown', message: ERROR_MESSAGES.unknown }))
