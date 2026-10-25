@@ -193,11 +193,6 @@ h2 {
   color: var(--forgotten);
 }
 
-.actions {
-  display: flex;
-  gap: 6px;
-}
-
 .btn {
   font: inherit;
   font-size: 12px;
@@ -222,15 +217,6 @@ h2 {
   opacity: 0.55;
   cursor: default;
 }
-.btn.remembered {
-  color: var(--solved);
-  border-color: rgba(74, 222, 128, 0.4);
-}
-.btn.forgotten {
-  color: var(--forgotten);
-  border-color: rgba(248, 113, 113, 0.4);
-}
-
 .open {
   font-size: 12px;
   color: var(--accent);

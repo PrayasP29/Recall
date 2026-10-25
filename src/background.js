@@ -1,13 +1,16 @@
-import { applyRevision, withInitialSchedule } from './lib/revisionScheduler.js'
 import { assignImportSchedules } from './lib/importScheduler.js'
 import { mergeImported } from './lib/importer.js'
 import {
+  ensureDailySelection,
+  initializeEligibility,
+} from './lib/dailySelection.js'
+import {
   isAcceptedEvent,
+  isDailySelectionRequest,
   isHistoryMerge,
-  isReviewRequest,
 } from './lib/messageValidation.js'
 import { enqueueOperation } from './lib/operationQueue.js'
-import { normalizeProblemUrl, upsertProblem } from './lib/tracker.js'
+import { normalizeProblemUrl, recordAccepted } from './lib/tracker.js'
 
 const queue = { current: Promise.resolve() }
 
@@ -31,11 +34,21 @@ async function loadProblems() {
   return result.problems ?? {}
 }
 
-async function saveProblems(problems) {
+async function loadState() {
+  const result = await storageArea().get(['problems', 'dailySelections'])
+  return { problems: result.problems ?? {}, dailySelections: result.dailySelections ?? {} }
+}
+
+async function saveState(problems, dailySelections) {
   console.info('[Recall background] storage write started')
-  await storageArea().set({ problems })
+  await storageArea().set({ problems, dailySelections })
   console.info('[Recall background] storage write completed')
   return problems
+}
+
+async function saveProblems(problems) {
+  const { dailySelections } = await loadState()
+  return saveState(problems, dailySelections)
 }
 
 function respond(sendResponse, operation) {
@@ -63,13 +76,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return respond(sendResponse, async () => {
       const problems = await loadProblems()
       const slug = event.problemId
-      const next = {
-        ...problems,
-        [slug]: upsertProblem(problems[slug], {
-          ...event,
-          url: normalizeProblemUrl(slug),
-        }),
-      }
+      const next = recordAccepted(problems, {
+        ...event,
+        url: normalizeProblemUrl(slug),
+      })
       await saveProblems(next)
       return { problems: next }
     })
@@ -78,43 +88,44 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === 'RECALL_MERGE_HISTORY') {
     if (!isHistoryMerge(msg)) return reject(sendResponse)
     return respond(sendResponse, async () => {
-      const { problems, stats } = mergeImported(await loadProblems(), msg.questions)
-      const merged = assignImportSchedules(problems, msg.todayDay)
-      await saveProblems(merged)
+      const state = await loadState()
+      const { problems, stats } = mergeImported(state.problems, msg.questions)
+      const imported = assignImportSchedules(problems, msg.todayDay)
+      const { problems: merged, migrationIssues } = initializeEligibility(imported, msg.todayDay)
+      const { selection, dailySelections } = ensureDailySelection(
+        merged,
+        state.dailySelections,
+        msg.todayDay,
+      )
+      await saveState(merged, dailySelections)
       return {
         importStatus: msg.importStatus,
         totalNum: msg.totalNum,
         stats,
         problems: merged,
+        selection,
+        migrationIssues,
       }
     })
   }
 
-  if (msg?.type === 'RECALL_REVIEW_PROBLEM') {
-    if (!isReviewRequest(msg)) return reject(sendResponse)
+  if (msg?.type === 'RECALL_MIGRATE_PROBLEMS' || msg?.type === 'RECALL_GET_DAILY_SELECTION') {
+    if (!isDailySelectionRequest(msg)) return reject(sendResponse)
     return respond(sendResponse, async () => {
-      const problems = await loadProblems()
-      const record = problems[msg.problemId]
-      if (!record) throw new Error('Problem is no longer stored.')
-      const updated = applyRevision(record, msg.result)
-      if (updated !== record) {
-        problems[msg.problemId] = updated
-        await saveProblems(problems)
-      }
-      return { problems }
-    })
-  }
-
-  if (msg?.type === 'RECALL_MIGRATE_PROBLEMS') {
-    return respond(sendResponse, async () => {
-      const problems = await loadProblems()
-      const migrated = Object.fromEntries(
-        Object.entries(problems).map(([id, record]) => [id, withInitialSchedule(record)]),
+      const { problems, dailySelections } = await loadState()
+      const { problems: migrated, migrationIssues } = initializeEligibility(problems, msg.todayDay)
+      const { selection, dailySelections: nextSelections } = ensureDailySelection(
+        migrated,
+        dailySelections,
+        msg.todayDay,
       )
-      if (Object.entries(migrated).some(([id, record]) => record !== problems[id])) {
-        await saveProblems(migrated)
+      if (
+        JSON.stringify(migrated) !== JSON.stringify(problems) ||
+        JSON.stringify(nextSelections) !== JSON.stringify(dailySelections)
+      ) {
+        await saveState(migrated, nextSelections)
       }
-      return { problems: migrated }
+      return { problems: migrated, selection, migrationIssues }
     })
   }
 })

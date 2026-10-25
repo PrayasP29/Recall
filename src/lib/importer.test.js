@@ -1,6 +1,5 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { addDays } from './revisionScheduler.js'
 import {
   ImportError,
   MAX_RETRIES,
@@ -10,7 +9,6 @@ import {
 } from './importer.js'
 
 const TODAY = '2026-10-21'
-const TOMORROW = addDays(TODAY, 1)
 
 const q = (slug, over = {}) => ({
   titleSlug: slug,
@@ -248,7 +246,7 @@ test('a failed tag response does not delete existing records', () => {
 
 // --- sync orchestration ---------------------------------------------------
 
-test('paginates until totalNum is reached and schedules imports at 3/day', async () => {
+test('paginates until totalNum is reached and makes imports eligible on sync day', async () => {
   const slugs = Array.from({ length: 120 }, (_, i) => `p${String(i).padStart(3, '0')}`)
   const fetchPage = stubPages([
     page(slugs.slice(0, 50).map((s) => q(s)), 120),
@@ -279,14 +277,13 @@ test('paginates until totalNum is reached and schedules imports at 3/day', async
   const perDay = {}
   for (const rec of Object.values(saved)) {
     assert.equal(rec.firstSolvedAt, null)
-    if (rec.nextRevisionAt) perDay[rec.nextRevisionAt] = (perDay[rec.nextRevisionAt] ?? 0) + 1
+    if (rec.eligibilityDate) perDay[rec.eligibilityDate] = (perDay[rec.eligibilityDate] ?? 0) + 1
   }
   for (const [day, count] of Object.entries(perDay)) {
-    assert.ok(count <= 3, `${day} has ${count}`)
+    assert.ok(count >= 1, `${day} has no imported records`)
   }
-  assert.ok(perDay[TOMORROW] >= 1)
-  assert.ok(Object.keys(perDay).every((d) => d > TODAY && d <= addDays(TODAY, 6)))
-  assert.equal(Object.values(saved).filter((rec) => rec.nextRevisionAt === null).length, 102)
+  assert.equal(perDay[TODAY], 120)
+  assert.equal(Object.values(saved).filter((rec) => rec.eligibilityDate === TODAY).length, 120)
 })
 
 test('auth failure aborts without touching storage', async () => {

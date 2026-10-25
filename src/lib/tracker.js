@@ -58,10 +58,11 @@ export function upsertProblem(existing, event) {
       firstSolvedAt: at,
       lastAcceptedAt: at,
       revisionHistory: [],
-      // First revision is due the next calendar day (local day of the solve).
+      eligibilityDate: initialDueDay(at),
       nextRevisionAt: initialDueDay(at),
     }
   }
+  const firstSolvedAt = existing.firstSolvedAt ?? at
   const lastAcceptedAt = existing.lastAcceptedAt > at ? existing.lastAcceptedAt : at
   // Topics only fill in (never overwrite): the problem page may not expose
   // tags, and a bare re-solve must not erase what a sync already stored.
@@ -70,9 +71,20 @@ export function upsertProblem(existing, event) {
     ...existing, // preserves revisionHistory and any existing revision schedule
     title: existing.title ?? event.title ?? null,
     difficulty: existing.difficulty ?? event.difficulty ?? null,
+    firstSolvedAt,
     lastAcceptedAt,
     ...(existingTopics.length || !topics.length ? {} : { topics }),
-    // Legacy records (nextRevisionAt null) get scheduled from firstSolvedAt.
-    nextRevisionAt: existing.nextRevisionAt ?? initialDueDay(existing.firstSolvedAt),
+    eligibilityDate: existing.eligibilityDate ?? (
+      existing.nextRevisionAt ?? initialDueDay(firstSolvedAt)
+    ),
+    nextRevisionAt: existing.nextRevisionAt ?? existing.eligibilityDate ?? initialDueDay(firstSolvedAt),
+  }
+}
+
+export function recordAccepted(problems, event) {
+  const all = problems ?? {}
+  return {
+    ...all,
+    [event.problemId]: upsertProblem(all[event.problemId], event),
   }
 }

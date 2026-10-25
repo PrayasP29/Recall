@@ -21,19 +21,42 @@ export function addDays(day, n) {
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10)
 }
 
-// Interval after the Nth consecutive 'remembered' review (1-based).
-export const REMEMBERED_INTERVALS = [3, 7, 14, 30]
-
-// Consecutive trailing 'remembered' reviews in the history.
-function trailingStreak(history) {
-  let n = 0
-  for (let i = history.length - 1; i >= 0 && history[i].result === 'remembered'; i--) n++
-  return n
+// First revision is due three local calendar days after the first solve.
+export function initialDueDay(firstSolvedAt) {
+  return addDays(toLocalDay(new Date(firstSolvedAt)), 3)
 }
 
-// First revision is due the calendar day after the first solve.
-export function initialDueDay(firstSolvedAt) {
-  return addDays(toLocalDay(new Date(firstSolvedAt)), 1)
+// Legacy fixed-queue capacity retained for backwards-compatible migration and
+// calendar helpers. The active popup uses dailySelection.js with two slots.
+export const DAILY_REVIEW_CAP = 3
+
+// The day a record already occupies. A legacy record without a stored date
+// but with firstSolvedAt is about to be migrated to initialDueDay(firstSolvedAt),
+// so it must reserve that day too.
+export function scheduledDayOf(record) {
+  if (record?.nextRevisionAt) return record.nextRevisionAt
+  if (record?.firstSolvedAt) return initialDueDay(record.firstSolvedAt)
+  return null
+}
+
+// Earliest day on/after startDay with fewer than `cap` scheduled records.
+// `excludeId` keeps the record being scheduled from counting itself. Pure and
+// deterministic: it only walks calendar days forward.
+export function nextAvailableRevisionDay(
+  problems,
+  startDay,
+  { cap = DAILY_REVIEW_CAP, excludeId = null } = {},
+) {
+  const load = {}
+  for (const [id, record] of Object.entries(problems ?? {})) {
+    if (id === excludeId) continue
+    const day = scheduledDayOf(record)
+    if (day) load[day] = (load[day] ?? 0) + 1
+  }
+  const limit = Math.max(1, cap)
+  let day = startDay
+  while ((load[day] ?? 0) >= limit) day = addDays(day, 1)
+  return day
 }
 
 // Migrate records that predate the scheduler (nextRevisionAt null).
@@ -43,22 +66,62 @@ export function withInitialSchedule(record) {
   return { ...record, nextRevisionAt: initialDueDay(record.firstSolvedAt) }
 }
 
-// Record one explicit revision attempt (never call on page open).
-//   remembered: +3 / +7 / +14 / +30 days by consecutive-streak position
-//   forgotten:  +1 day, streak resets
-// Returns the SAME record object if this reviewedAt was already recorded
-// (double-click / replay guard) — callers can compare by identity.
-export function applyRevision(record, result, reviewedAt = new Date().toISOString()) {
-  const history = record.revisionHistory ?? []
-  if (history.some((h) => h.reviewedAt === reviewedAt)) return record
-  const streak = trailingStreak([...history, { result }])
-  const days = result === 'remembered' ? REMEMBERED_INTERVALS[Math.min(streak, 4) - 1] : 1
-  const nextRevisionAt = addDays(toLocalDay(new Date(reviewedAt)), days)
-  return {
-    ...record,
-    revisionHistory: [...history, { reviewedAt, result, nextRevisionAt }],
-    nextRevisionAt,
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/
+
+function validDay(value) {
+  if (typeof value !== 'string' || !DAY_RE.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  return addDays(value, 0) === value && year >= 2000 && month >= 1 && month <= 12 && day >= 1 && day <= 31
+}
+
+// Repair legacy schedules without changing revision history. Known solve dates
+// are authoritative for missing or 1970-era dates; ambiguous records remain
+// unscheduled and are reported for manual recovery.
+export function reconcileSchedules(problems) {
+  const source = problems ?? {}
+  const next = {}
+  const load = {}
+  const migrationIssues = []
+  const entries = Object.entries(source).sort(([a], [b]) => a.localeCompare(b))
+
+  const place = (record, requestedDay) => {
+    let day = requestedDay
+    while ((load[day] ?? 0) >= DAILY_REVIEW_CAP) day = addDays(day, 1)
+    load[day] = (load[day] ?? 0) + 1
+    return day
   }
+
+  for (const [id, record] of entries) {
+    let updated
+    const storedDay = record.nextRevisionAt
+    const invalidStoredDay = storedDay != null && !validDay(storedDay)
+    const legacyDate = invalidStoredDay || (typeof storedDay === 'string' && storedDay.startsWith('1970-'))
+    const historyDay = [...(record.revisionHistory ?? [])]
+      .reverse()
+      .map((entry) => entry?.nextRevisionAt)
+      .find(validDay)
+    const requestedDay = historyDay ?? (
+      !record.revisionHistory?.length && record.firstSolvedAt
+        ? initialDueDay(record.firstSolvedAt)
+        : null
+    )
+    if ((storedDay == null || legacyDate) && requestedDay) {
+      updated = { ...record, nextRevisionAt: place(record, requestedDay) }
+    } else if (storedDay == null) {
+      migrationIssues.push({ problemId: id, reason: 'missing firstSolvedAt and nextRevisionAt' })
+      next[id] = record
+      continue
+    } else if (legacyDate) {
+      migrationIssues.push({ problemId: id, reason: 'invalid nextRevisionAt with no reliable firstSolvedAt' })
+      next[id] = record
+      continue
+    } else {
+      updated = { ...record, nextRevisionAt: place(record, storedDay) }
+    }
+    next[id] = updated
+  }
+
+  return { problems: next, migrationIssues }
 }
 
 // A revision is actionable iff it is due today or overdue (never early).

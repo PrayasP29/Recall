@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { addDays, applyRevision } from './revisionScheduler.js'
+import { addDays } from './revisionScheduler.js'
 import {
   PRACTICE_CAP,
   PRACTICE_DAYS,
@@ -48,7 +48,7 @@ test('rolling schedule covers seven days and caps every queue at three', () => {
   }
 })
 
-test('each daily queue uses one pattern and never mixes unrelated records', () => {
+test('daily queue prioritizes due order across patterns', () => {
   const problems = {
     trees: record('trees', ['Two Pointers'], TODAY),
     graphs: record('graphs', ['Graphs'], TODAY),
@@ -56,7 +56,8 @@ test('each daily queue uses one pattern and never mixes unrelated records', () =
   }
   const schedule = buildPracticeSchedule(problems, TODAY)
   const today = plannedRecords(problems, schedule.assignments[TODAY])
-  assert.equal(new Set(today.map((item) => item.topics[0])).size, 1)
+  assert.deepEqual(today.map((item) => item.problemId), ['graphs', 'trees'])
+  assert.equal(schedule.assignments[TODAY].topic, 'Other')
   assert.equal(schedule.backlog.length, 0)
 })
 
@@ -110,6 +111,32 @@ test('a future day with fewer than three eligible questions remains below the ca
   assert.deepEqual(schedule.assignments['2026-10-24'].problemIds, ['b1', 'b2'])
 })
 
+test('daily queue returns zero, one, or two records without filler', () => {
+  for (const count of [0, 1, 2]) {
+    const problems = Object.fromEntries(
+      Array.from({ length: count }, (_, index) => {
+        const id = `q-${index}`
+        return [id, record(id, ['Trees'], TODAY)]
+      }),
+    )
+    assert.equal(buildPracticeSchedule(problems, TODAY).assignments[TODAY].problemIds.length, count)
+  }
+})
+
+test('daily queue caps eligible work at three and retains overflow as backlog', () => {
+  const problems = Object.fromEntries(
+    Array.from({ length: 8 }, (_, index) => {
+      const id = `q-${index}`
+      return [id, record(id, ['Trees'], TODAY)]
+    }),
+  )
+  const schedule = buildPracticeSchedule(problems, TODAY)
+  assert.equal(schedule.assignments[TODAY].problemIds.length, 3)
+  assert.equal(schedule.backlog.length, 2)
+  assert.equal(schedule.assignments['2026-10-26'].problemIds.length, 3)
+  assert.equal(new Set(schedule.assignments[TODAY].problemIds).size, 3)
+})
+
 test('Monday reviews at most three most-overdue questions from one pattern', () => {
   const monday = '2026-10-19'
   const problems = {
@@ -122,9 +149,9 @@ test('Monday reviews at most three most-overdue questions from one pattern', () 
   const schedule = buildPracticeSchedule(problems, monday)
   const assignment = schedule.assignments[monday]
   assert.equal(assignment.weeklyOverdueReview, true)
-  assert.equal(assignment.topic, 'Graphs')
-  assert.deepEqual(assignment.problemIds, ['g1'])
-  assert.equal(schedule.backlog.length, 4)
+  assert.equal(assignment.topic, 'Other')
+  assert.deepEqual(assignment.problemIds, ['g1', 't1', 't2'])
+  assert.equal(schedule.backlog.length, 2)
 })
 
 test('Monday review keeps a two-question selected pattern and retains other overdue patterns', () => {
@@ -138,10 +165,10 @@ test('Monday review keeps a two-question selected pattern and retains other over
   const schedule = buildPracticeSchedule(problems, '2026-10-26')
   const assignment = schedule.assignments['2026-10-26']
 
-  assert.equal(assignment.topic, 'Dynamic Programming')
-  assert.deepEqual(assignment.problemIds, ['stock', 'stairs'])
-  assert.equal(schedule.backlog.length, 3)
-  assert.deepEqual(schedule.backlog.map((item) => item.problemId), ['graph-a', 'graph-b', 'graph-c'])
+  assert.equal(assignment.topic, 'Other')
+  assert.deepEqual(assignment.problemIds, ['stock', 'stairs', 'graph-a'])
+  assert.equal(schedule.backlog.length, 2)
+  assert.deepEqual(schedule.backlog.map((item) => item.problemId), ['graph-b', 'graph-c'])
 })
 
 test('Monday review includes the third eligible question from the selected pattern', () => {
@@ -170,9 +197,9 @@ test('a rolling window starting before Monday includes the next Monday overdue r
   const schedule = buildPracticeSchedule(problems, '2026-10-23')
   const assignment = schedule.assignments['2026-10-26']
   assert.equal(assignment.weeklyOverdueReview, true)
-  assert.deepEqual(assignment.problemIds, ['oldest-a', 'oldest-b', 'oldest-c'])
-  assert.deepEqual(schedule.assignments['2026-10-27'].problemIds, [])
-  assert.deepEqual(schedule.backlog.map((item) => item.problemId), ['oldest-d'])
+  assert.deepEqual(schedule.assignments['2026-10-23'].problemIds, ['oldest-a', 'oldest-b', 'oldest-c'])
+  assert.deepEqual(assignment.problemIds, ['oldest-d'])
+  assert.deepEqual(schedule.backlog, [])
 })
 
 test('planned assignments do not modify genuine due dates or history', () => {
@@ -199,22 +226,12 @@ test('schedule generation is idempotent and does not duplicate assignments', () 
   assert.equal(new Set(assigned).size, assigned.length)
 })
 
-test('remembered and forgotten intervals remain owned by revisionScheduler', () => {
-  const original = record('a', ['Trees'], TODAY)
-  const remembered = applyRevision(original, 'remembered', '2026-10-22T09:00:00.000Z')
-  const forgotten = applyRevision(original, 'forgotten', '2026-10-22T09:00:00.000Z')
-  assert.equal(remembered.nextRevisionAt, '2026-10-25')
-  assert.equal(forgotten.nextRevisionAt, '2026-10-23')
-})
-
-test('pending imported questions enter the next rolling window without storage dates', () => {
+test('pending imported questions are not eligible without a stored schedule', () => {
   const imported = record('imported', ['Trees'], null, { imported: true })
   const problems = { imported }
   const schedule = buildPracticeSchedule(problems, TODAY)
   const planned = plannedRecords(problems, schedule.assignments['2026-10-23'])
-
-  assert.equal(planned[0].problemId, 'imported')
-  assert.equal(planned[0].nextRevisionAt, '2026-10-23')
+  assert.deepEqual(planned, [])
   assert.equal(imported.nextRevisionAt, null)
   assert.deepEqual(imported.revisionHistory, [])
 })
@@ -227,7 +244,7 @@ test('pending imports are not added to Monday overdue review or backlog', () => 
   const schedule = buildPracticeSchedule(problems, '2026-10-19')
   assert.deepEqual(schedule.assignments['2026-10-19'].problemIds, ['overdue'])
   assert.equal(schedule.backlog.length, 0)
-  assert.deepEqual(schedule.assignments['2026-10-20'].problemIds, ['imported'])
+  assert.deepEqual(schedule.assignments['2026-10-20'].problemIds, [])
 })
 
 test('overdue backlog remains separate on Tuesday after Monday review', () => {
@@ -239,8 +256,8 @@ test('overdue backlog remains separate on Tuesday after Monday review', () => {
   )
   const schedule = buildPracticeSchedule(problems, '2026-10-20')
   assert.equal(schedule.assignments['2026-10-20'].weeklyOverdueReview, false)
-  assert.deepEqual(schedule.assignments['2026-10-20'].problemIds, [])
-  assert.equal(schedule.backlog.length, 2)
+  assert.deepEqual(schedule.assignments['2026-10-20'].problemIds, ['trees-0', 'trees-1', 'trees-2'])
+  assert.equal(schedule.backlog.length, 0)
 })
 
 test('Sunday-to-Monday transition activates the weekly review queue', () => {
@@ -257,15 +274,6 @@ test('Sunday-to-Monday transition activates the weekly review queue', () => {
   assert.equal(monday.assignments['2026-10-19'].problemIds.length, 3)
 })
 
-test('a revised question is regenerated from its new genuine due date', () => {
-  const original = record('a', ['Trees'], TODAY)
-  const reviewed = applyRevision(original, 'remembered', '2026-10-22T09:00:00.000Z')
-  const schedule = buildPracticeSchedule({ a: reviewed }, TODAY)
-  assert.deepEqual(schedule.assignments['2026-10-25'].problemIds, ['a'])
-  assert.equal(reviewed.nextRevisionAt, '2026-10-25')
-  assert.equal(reviewed.revisionHistory.length, 1)
-})
-
 test('rolling planning remains correct across month and year boundaries', () => {
   const schedule = buildPracticeSchedule({
     month: record('month', ['Trees'], '2026-12-31'),
@@ -280,4 +288,38 @@ test('rolling planning remains correct across month and year boundaries', () => 
     '2027-01-05',
     '2027-01-06',
   ])
+})
+
+test('generic-only due questions are visible under Other', () => {
+  const problems = Object.fromEntries(
+    Array.from({ length: 4 }, (_, index) => {
+      const id = `generic-${index}`
+      return [id, record(id, ['Array'], TODAY)]
+    }),
+  )
+  const schedule = buildPracticeSchedule(problems, TODAY)
+  assert.equal(schedule.assignments[TODAY].topic, 'Other')
+  assert.deepEqual(schedule.assignments[TODAY].problemIds, ['generic-0', 'generic-1', 'generic-2'])
+  // The fourth is not dropped; the weekly review picks it up.
+  assert.deepEqual(schedule.assignments['2026-10-26'].problemIds, ['generic-3'])
+  assert.equal(schedule.backlog.length, 0)
+})
+
+test('untagged due questions are visible under Other', () => {
+  const problems = {
+    untagged: record('untagged', [], TODAY),
+  }
+  const assignment = buildPracticeSchedule(problems, TODAY).assignments[TODAY]
+  assert.equal(assignment.topic, 'Other')
+  assert.deepEqual(assignment.problemIds, ['untagged'])
+})
+
+test('generic overdue questions appear in the weekly review under Other', () => {
+  const problems = {
+    generic: record('generic', ['Array'], '2026-10-20'),
+  }
+  const assignment = buildPracticeSchedule(problems, TODAY).assignments[TODAY]
+  assert.equal(assignment.weeklyOverdueReview, false)
+  assert.equal(assignment.topic, 'Other')
+  assert.deepEqual(assignment.problemIds, ['generic'])
 })
