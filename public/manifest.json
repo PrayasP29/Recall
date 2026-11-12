@@ -3,6 +3,9 @@
   "name": "Recall - LeetCode Revision Tracker",
   "version": "1.0.2",
   "description": "Tracks accepted LeetCode submissions and reminds you to revise previously solved problems.",
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  },
   "background": {
     "service_worker": "background.js"
   },

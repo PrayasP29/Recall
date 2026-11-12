@@ -1,3 +1,4 @@
+import { resolve } from 'path'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
@@ -5,6 +6,14 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   base: './',
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      input: {
+        index: resolve(import.meta.dirname, 'index.html'),
+        newtab: resolve(import.meta.dirname, 'newtab.html'),
+      },
+    },
+  },
   // The content script is built separately by vite.content.config.js as a
   // self-contained IIFE: it is a classic script (no import statements), so
   // it must never share chunks with this build.
