@@ -4,6 +4,13 @@ import { toLocalDay } from './lib/revisionScheduler.js';
 import { normalizeTopics } from './lib/patterns.js';
 import { revisionSessionUrl } from './lib/revisionSession.js';
 import { historySyncState } from './lib/historySync.js';
+import {
+  calculateStreak,
+  calculateUniqueRevisedCount,
+  isProblemRevisedOnDate,
+  recordRevision,
+  REVISION_ACTIVITY_STORAGE_KEY,
+} from './lib/revisionTracking.js';
 
 // Background motif
 import backdropCircles from './assets/backdrop-circles.svg';
@@ -63,6 +70,7 @@ function getWeekColumns(todayDay) {
 export default function NewTabDashboard() {
   const [problems, setProblems] = useState(null); // null = loading
   const [selection, setSelection] = useState([]);
+  const [revisionActivity, setRevisionActivity] = useState([]);
   const [todayDay, setTodayDay] = useState(() => toLocalDay(new Date()));
   const [loadError, setLoadError] = useState(false);
   const [sync, setSync] = useState({ status: 'idle' });
@@ -78,11 +86,12 @@ export default function NewTabDashboard() {
     const currentToday = toLocalDay(new Date());
     setTodayDay(currentToday);
 
-    chrome?.storage?.local?.get(['problems', 'dailySelections', 'recall_reduce_motion'])
+    chrome?.storage?.local?.get(['problems', 'dailySelections', 'recall_reduce_motion', REVISION_ACTIVITY_STORAGE_KEY])
       .then((storage) => {
         if (!storage) {
           setProblems({});
           setSelection([]);
+          setRevisionActivity([]);
           return;
         }
 
@@ -91,6 +100,10 @@ export default function NewTabDashboard() {
         } else {
           const sysPrefersReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
           setReduceMotion(Boolean(sysPrefersReduced));
+        }
+
+        if (Array.isArray(storage[REVISION_ACTIVITY_STORAGE_KEY])) {
+          setRevisionActivity(storage[REVISION_ACTIVITY_STORAGE_KEY]);
         }
 
         const storedProblems = storage.problems ?? {};
@@ -126,6 +139,7 @@ export default function NewTabDashboard() {
         setLoadError(true);
         setProblems({});
         setSelection([]);
+        setRevisionActivity([]);
       });
   };
 
@@ -137,17 +151,22 @@ export default function NewTabDashboard() {
       const fallbackTimer = setTimeout(() => {
         setProblems({});
         setSelection([]);
+        setRevisionActivity([]);
       }, 0);
       return () => clearTimeout(fallbackTimer);
     }
 
-    chrome.storage.local.get(['problems', 'dailySelections', 'recall_reduce_motion'])
+    chrome.storage.local.get(['problems', 'dailySelections', 'recall_reduce_motion', REVISION_ACTIVITY_STORAGE_KEY])
       .then((storage) => {
         if (storage.recall_reduce_motion !== undefined) {
           setReduceMotion(Boolean(storage.recall_reduce_motion));
         } else {
           const sysPrefersReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
           setReduceMotion(Boolean(sysPrefersReduced));
+        }
+
+        if (Array.isArray(storage[REVISION_ACTIVITY_STORAGE_KEY])) {
+          setRevisionActivity(storage[REVISION_ACTIVITY_STORAGE_KEY]);
         }
 
         const storedProblems = storage.problems ?? {};
@@ -183,6 +202,7 @@ export default function NewTabDashboard() {
         setLoadError(true);
         setProblems({});
         setSelection([]);
+        setRevisionActivity([]);
       });
 
     // Re-check day and selection on window focus
@@ -203,6 +223,9 @@ export default function NewTabDashboard() {
       if (area !== 'local') return;
       if (changes.problems || changes.dailySelections) {
         loadData();
+      }
+      if (changes[REVISION_ACTIVITY_STORAGE_KEY]) {
+        setRevisionActivity(changes[REVISION_ACTIVITY_STORAGE_KEY].newValue || []);
       }
       if (changes.recall_reduce_motion !== undefined) {
         setReduceMotion(Boolean(changes.recall_reduce_motion.newValue));
@@ -285,6 +308,30 @@ export default function NewTabDashboard() {
 
   // Problems metadata & counts
   const totalTracked = useMemo(() => Object.keys(problems ?? {}).length, [problems]);
+
+  // Revision tracking counts
+  const revisedCount = useMemo(
+    () => calculateUniqueRevisedCount(revisionActivity, problems),
+    [revisionActivity, problems]
+  );
+
+  const currentStreak = useMemo(
+    () => calculateStreak(revisionActivity, todayDay),
+    [revisionActivity, todayDay]
+  );
+
+  // Mark a problem as revised today (with idempotent duplicate protection)
+  const handleMarkRevised = async (problemId) => {
+    if (!problemId) return;
+    const { nextActivity, isNew } = recordRevision(revisionActivity, problemId, todayDay);
+    if (!isNew) return;
+    setRevisionActivity(nextActivity);
+    try {
+      await chrome?.storage?.local?.set({ [REVISION_ACTIVITY_STORAGE_KEY]: nextActivity });
+    } catch (err) {
+      console.error('Failed to persist revision activity:', err);
+    }
+  };
 
   const selectedQuestions = useMemo(() => {
     if (!problems) return [];
@@ -659,15 +706,12 @@ export default function NewTabDashboard() {
                   const displayTopics = topicsList.slice(0, 3).map((t) => t.toUpperCase()).join(' · ');
                   const remainingTopics = topicsList.length > 3 ? ` +${topicsList.length - 3}` : '';
                   const diff = rec.difficulty || 'Medium';
+                  const isRevisedToday = isProblemRevisedOnDate(revisionActivity, rec.problemId, todayDay);
 
                   return (
-                    <a
+                    <div
                       key={rec.problemId}
-                      href={href}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="hero-question-row"
-                      aria-label={`${index + 1}. ${rec.title || rec.problemId}. Topics: ${topicsList.join(', ')}. Difficulty: ${diff}. Opens LeetCode in a new tab.`}
+                      className={`hero-question-row ${isRevisedToday ? 'is-revised' : ''}`}
                     >
                       <div className="hero-q-idx">
                         {String(index + 1).padStart(2, '0')}
@@ -677,7 +721,15 @@ export default function NewTabDashboard() {
                         <div className="hero-q-topics">
                           {displayTopics ? `${displayTopics}${remainingTopics}` : 'OTHER'}
                         </div>
-                        <h2 className="hero-q-title">{rec.title || rec.problemId}</h2>
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="hero-q-title-link"
+                          title="Open problem on LeetCode"
+                        >
+                          <h2 className="hero-q-title">{rec.title || rec.problemId}</h2>
+                        </a>
                         <div className="difficulty-marker">
                           <span
                             className={`diff-dot dark-diff ${diff === 'Hard' ? 'hard-filled' : 'filled'}`}
@@ -695,16 +747,51 @@ export default function NewTabDashboard() {
                       </div>
 
                       <div className="hero-q-action">
-                        <span className={`hero-open-btn ${index === 0 ? 'primary' : 'secondary'}`}>
-                          OPEN ON LEETCODE
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <line x1="7" y1="17" x2="17" y2="7" />
-                            <polyline points="7 7 17 7 17 17" />
-                          </svg>
+                        <div className="hero-action-buttons">
+                          <button
+                            type="button"
+                            className={`hero-revised-btn ${isRevisedToday ? 'completed' : ''}`}
+                            onClick={() => handleMarkRevised(rec.problemId)}
+                            title={isRevisedToday ? 'Marked as revised today' : 'Mark as revised today'}
+                            aria-label={
+                              isRevisedToday
+                                ? `${rec.title || rec.problemId} marked as revised today`
+                                : `Mark ${rec.title || rec.problemId} as revised`
+                            }
+                          >
+                            {isRevisedToday ? (
+                              <>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                                REVISED
+                              </>
+                            ) : (
+                              <>
+                                <span className="revise-dot" />
+                                MARK AS REVISED
+                              </>
+                            )}
+                          </button>
+
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={`hero-open-btn ${index === 0 ? 'primary' : 'secondary'}`}
+                          >
+                            OPEN ON LEETCODE
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <line x1="7" y1="17" x2="17" y2="7" />
+                              <polyline points="7 7 17 7 17 17" />
+                            </svg>
+                          </a>
+                        </div>
+                        <span className="hero-open-hint">
+                          {isRevisedToday ? 'COMPLETED TODAY' : 'OPENS IN NEW TAB'}
                         </span>
-                        <span className="hero-open-hint">OPENS IN NEW TAB</span>
                       </div>
-                    </a>
+                    </div>
                   );
                 })}
 
@@ -760,7 +847,16 @@ export default function NewTabDashboard() {
           </div>
 
           <div className="headline-meta-row">
-            <div className="edition-label">EDITION · {weekdayName}</div>
+            <div className="meta-left-col">
+              <div className="edition-label">EDITION · {weekdayName}</div>
+              <blockquote className="motivational-quote-box">
+                <span className="quote-bracket">[</span>
+                <p className="motivational-quote-text">
+                  DEBUG YOUR HABITS BEFORE SOMEONE DEBUGS YOUR <span className="crimson-accent">INTERVIEW.</span>
+                </p>
+                <span className="quote-bracket">]</span>
+              </blockquote>
+            </div>
 
             <div className="intro-cta-box">
               <p className="intro-lead">{introText}</p>
@@ -858,33 +954,32 @@ export default function NewTabDashboard() {
               </div>
             </div>
 
-            {/* Secondary Blocks (Cols 6-12 in a row) */}
+            {/* Secondary Blocks (Cols 6-12 in a row: 2 cards) */}
             <div className="stat-blocks-secondary">
               {/* Block 2: Revised */}
-              <div className="stat-block-card" aria-label="Revised: not available yet">
+              <div className="stat-block-card" aria-label={`Revised: ${revisedCount} distinct problems`}>
                 <div>
                   <span className="section-label light">REVISED</span>
-                  <div className="stat-card-numeral">—</div>
+                  <div className="stat-card-numeral active-numeral">{revisedCount}</div>
+                  <span className="stat-card-sublabel">
+                    {revisedCount === 1 ? 'DISTINCT PROBLEM' : 'DISTINCT PROBLEMS'}
+                  </span>
                 </div>
-                <span className="coming-soon-tag">COMING SOON</span>
+                <span className="stat-card-status">MARKED REVISED</span>
               </div>
 
-              {/* Block 3: Remaining */}
-              <div className="stat-block-card" aria-label="Remaining: not available yet">
-                <div>
-                  <span className="section-label light">REMAINING</span>
-                  <div className="stat-card-numeral">—</div>
-                </div>
-                <span className="coming-soon-tag">COMING SOON</span>
-              </div>
-
-              {/* Block 4: Streak */}
-              <div className="stat-block-card" aria-label="Streak: not available yet">
+              {/* Block 3: Streak */}
+              <div className="stat-block-card" aria-label={`Streak: ${currentStreak} days`}>
                 <div>
                   <span className="section-label light">STREAK</span>
-                  <div className="stat-card-numeral">— DAYS</div>
+                  <div className="stat-card-numeral active-numeral">
+                    {currentStreak} <span className="stat-unit">DAYS</span>
+                  </div>
+                  <span className="stat-card-sublabel">
+                    {currentStreak > 0 ? 'CONSECUTIVE DAYS' : 'NO REVISION TODAY'}
+                  </span>
                 </div>
-                <span className="coming-soon-tag">COMING SOON</span>
+                <span className="stat-card-status">DAILY STREAK</span>
               </div>
             </div>
           </div>
