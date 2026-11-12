@@ -1,0 +1,13 @@
+<svg width="1440" height="700" viewBox="0 0 1440 700" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="720" cy="350" r="160" stroke="#2A2A2A" stroke-width="1" stroke-dasharray="2 4"/>
+  <circle cx="720" cy="350" r="280" stroke="#2A2A2A" stroke-width="1"/>
+  <circle cx="720" cy="350" r="420" stroke="#2A2A2A" stroke-width="1" stroke-dasharray="4 8"/>
+  <circle cx="720" cy="350" r="580" stroke="#2A2A2A" stroke-width="1"/>
+  <circle cx="720" cy="350" r="760" stroke="#2A2A2A" stroke-width="1"/>
+  <!-- Crosshair alignment lines -->
+  <line x1="720" y1="0" x2="720" y2="700" stroke="#2A2A2A" stroke-width="1" stroke-dasharray="2 6"/>
+  <line x1="0" y1="350" x2="1440" y2="350" stroke="#2A2A2A" stroke-width="1" stroke-dasharray="2 6"/>
+  <!-- Subtle diagonal lines -->
+  <line x1="300" y1="0" x2="1140" y2="700" stroke="#2A2A2A" stroke-width="0.5"/>
+  <line x1="1140" y1="0" x2="300" y2="700" stroke="#2A2A2A" stroke-width="0.5"/>
+</svg>
