@@ -4,9 +4,8 @@ import { toLocalDay } from './lib/revisionScheduler.js';
 import { normalizeTopics } from './lib/patterns.js';
 import { revisionSessionUrl } from './lib/revisionSession.js';
 import { historySyncState } from './lib/historySync.js';
-import NodeSphere from './components/NodeSphere.jsx';
 
-// Assets
+// Background motif
 import backdropCircles from './assets/backdrop-circles.svg';
 
 const QUOTES = [
@@ -393,20 +392,18 @@ export default function NewTabDashboard() {
       </a>
 
       {/* ====================================================================
-          1. HERO BLOCK (Dark bg-ink, curved bottom edge + crimson line)
+          SECTION 1 — TODAY'S REVISION (Dark editorial hero, questions in view)
           ==================================================================== */}
       <section
+        id="today"
         className="hero-block"
         ref={heroBlockRef}
-        aria-label="Editorial Hero"
+        aria-label="Today's Revision"
       >
         {/* Background Decorative Motif */}
         <div className="hero-backdrop-motif" aria-hidden="true">
           <img src={backdropCircles} alt="" />
         </div>
-
-        {/* Ambient Crimson Glow behind stack */}
-        <div className="hero-crimson-glow" aria-hidden="true" />
 
         {/* Site Header */}
         <header className="hero-header grid-container">
@@ -423,8 +420,12 @@ export default function NewTabDashboard() {
 
           {/* Centre: Nav Anchors */}
           <nav className="header-nav" aria-label="Section navigation">
-            <a href="#today" className="nav-link">
+            <a href="#today" className="nav-link active">
               TODAY
+            </a>
+            <span className="nav-sep" aria-hidden="true" />
+            <a href="#next-move" className="nav-link">
+              YOUR MOVE
             </a>
             <span className="nav-sep" aria-hidden="true" />
             <a href="#progress" className="nav-link">
@@ -482,33 +483,36 @@ export default function NewTabDashboard() {
           </div>
         </header>
 
-        {/* Hero Compact Grid */}
+        {/* Section 1 Main Content */}
         <div className="hero-content grid-container">
-          {/* Left: Cols 1-4: Meta and 3 Discs beneath */}
-          <div className="meta-left">
-            <div className="section-label dark">
-              <span className="crimson-tick" />
-              TODAY'S REVISION
-            </div>
-            <div className="meta-issue">
-              ISSUE {String(dayOfYear).padStart(3, '0')} / {daysInYear}
-            </div>
-            <div className="meta-count-group">
-              <div className="index-circle">
-                {problems === null ? '—' : String(selectedQuestions.length).padStart(2, '0')}
+          {/* Top Info & Stats Row */}
+          <div className="hero-stats-band">
+            {/* Meta Left */}
+            <div className="meta-left">
+              <div className="section-label dark">
+                <span className="crimson-tick" />
+                TODAY'S REVISION
               </div>
-              <div className="marks-row" aria-label={`${selectedQuestions.length} questions selected`}>
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <span
-                    key={i}
-                    className={`mark-dot ${i < selectedQuestions.length ? 'filled' : ''}`}
-                    aria-hidden="true"
-                  />
-                ))}
+              <div className="meta-issue">
+                ISSUE {String(dayOfYear).padStart(3, '0')} / {daysInYear}
+              </div>
+              <div className="meta-count-group">
+                <div className="index-circle">
+                  {problems === null ? '—' : String(selectedQuestions.length).padStart(2, '0')}
+                </div>
+                <div className="marks-row" aria-label={`${selectedQuestions.length} questions selected`}>
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <span
+                      key={i}
+                      className={`mark-dot ${i < selectedQuestions.length ? 'filled' : ''}`}
+                      aria-hidden="true"
+                    />
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* Discs in a row beneath meta */}
+            {/* The 3 Discs */}
             <div className="discs-row">
               {/* Disc 1: Today */}
               <div className="editorial-disc variant-paper">
@@ -532,160 +536,51 @@ export default function NewTabDashboard() {
                 </span>
               </div>
             </div>
-          </div>
 
-          {/* Centre: Cols 5-8: Node Sphere */}
-          <div className="hero-sphere-center">
-            <NodeSphere
-              selectedCount={problems === null ? 0 : selectedQuestions.length}
-              reduceMotion={reduceMotion}
-              heroRef={heroBlockRef}
-            />
-          </div>
-
-          {/* Right: Cols 9-12: Pull Quote */}
-          <div className="hero-pull-quote">
-            <div className="quote-text">{heroQuote}</div>
-            <div className="quote-arrow" aria-hidden="true">
-              ↘
-            </div>
-          </div>
-        </div>
-
-        {/* Edge Navigation Anchor Discs */}
-        <button
-          type="button"
-          className="hero-edge-anchor left"
-          onClick={() => window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' })}
-          title="Scroll to top"
-          aria-label="Scroll to top"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="16,4 6,12 16,20" />
-          </svg>
-        </button>
-
-        <button
-          type="button"
-          className="hero-edge-anchor right"
-          onClick={() => document.getElementById('today')?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' })}
-          title="Scroll to Today's Revision"
-          aria-label="Scroll to Today's Revision"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="8,4 18,12 8,20" />
-          </svg>
-        </button>
-      </section>
-
-      {/* ====================================================================
-          2. HEADLINE BAND (on paper surface) — Hybrid compact row with CTA
-          ==================================================================== */}
-      <section className="headline-band" aria-label="Hero Headline and Call to Action">
-        <div className="grid-container headline-grid">
-          {/* Cols 1-8: Headline */}
-          <div className="headline-col">
-            <h1 className="headline-h1">
-              <span>YOUR</span>
-              <span className="headline-connector">NEXT</span>
-              <span>MOVE.</span>
-            </h1>
-          </div>
-
-          {/* Cols 9-12: Intro + CTA bottom-aligned to headline baseline */}
-          <div className="headline-cta-col">
-            <p className="intro-lead">{introText}</p>
-
-            <div className="cta-action-group">
-              {firstQuestionUrl ? (
-                <a
-                  className="primary-cta-btn"
-                  href={firstQuestionUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  START REVISING
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                    <polyline points="12 5 19 12 12 19" />
-                  </svg>
-                </a>
-              ) : (
-                <button type="button" className="primary-cta-btn" disabled>
-                  {problems === null ? 'LOADING…' : 'NOTHING TO REVISE'}
-                </button>
-              )}
-
-              <a
-                href="#today"
-                className="cta-secondary-link"
-                onClick={(e) => {
-                  e.preventDefault();
-                  document.getElementById('today')?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
-                }}
-              >
-                SEE TODAY'S QUESTIONS ↓
-              </a>
+            {/* Pull Quote */}
+            <div className="hero-pull-quote">
+              <div className="quote-text">{heroQuote}</div>
+              <div className="quote-arrow" aria-hidden="true">
+                ↘
+              </div>
             </div>
           </div>
 
-          {/* 28px tall strip under headline hairline */}
-          <div className="headline-edition-strip">
-            <span className="edition-label">EDITION · {weekdayName}</span>
-          </div>
-        </div>
-      </section>
-
-      {/* ====================================================================
-          3. DAILY REVISION SECTION (on paper)
-          ==================================================================== */}
-      <main id="today" className="daily-revision-section">
-        <div className="grid-container">
-          <div className="section-header-row">
-            <div>
-              <span className="crimson-tick" />
-              <span className="section-label light">DAILY REVISION</span>
-              <h2 className="section-title">
-                <span className="section-title-connector">TODAY'S</span> REVISION
-              </h2>
+          {/* Daily Revision Questions List (Directly in Main Initial View) */}
+          <div className="hero-questions-section">
+            <div className="hero-questions-header">
+              <span className="section-label dark">
+                {problems === null
+                  ? "LOADING TODAY'S REVISION…"
+                  : `${selectedQuestions.length} OF 2 SELECTED FOR TODAY`}
+              </span>
             </div>
-            <div className="section-header-meta">
-              {problems === null
-                ? "LOADING TODAY'S REVISION…"
-                : `${selectedQuestions.length} OF 2 SELECTED`}
-            </div>
-          </div>
 
-          <div className="revision-entries-list">
-            {/* Loading State */}
+            {/* Loading Skeleton */}
             {problems === null && (
-              <>
-                <div className="skeleton-row" aria-busy="true">
-                  <div className="entry-index-col">01</div>
-                  <div className="entry-content-col">
-                    <div className="skeleton-bar pulse" style={{ width: '30%', marginBottom: 12 }} />
-                    <div className="skeleton-bar pulse" style={{ width: '80%', height: 40 }} />
+              <div className="hero-questions-list" aria-busy="true">
+                <div className="hero-question-skeleton">
+                  <div className="skeleton-idx">01</div>
+                  <div className="skeleton-body">
+                    <div className="skeleton-bar pulse" style={{ width: '28%', marginBottom: 8 }} />
+                    <div className="skeleton-bar pulse" style={{ width: '65%', height: 32 }} />
                   </div>
-                  <div className="entry-action-col">
-                    <div className="skeleton-bar pulse" style={{ width: 140, height: 48 }} />
-                  </div>
+                  <div className="skeleton-btn pulse" />
                 </div>
-                <div className="skeleton-row" aria-busy="true">
-                  <div className="entry-index-col">02</div>
-                  <div className="entry-content-col">
-                    <div className="skeleton-bar pulse" style={{ width: '25%', marginBottom: 12 }} />
-                    <div className="skeleton-bar pulse" style={{ width: '70%', height: 40 }} />
+                <div className="hero-question-skeleton">
+                  <div className="skeleton-idx">02</div>
+                  <div className="skeleton-body">
+                    <div className="skeleton-bar pulse" style={{ width: '22%', marginBottom: 8 }} />
+                    <div className="skeleton-bar pulse" style={{ width: '58%', height: 32 }} />
                   </div>
-                  <div className="entry-action-col">
-                    <div className="skeleton-bar pulse" style={{ width: 140, height: 48 }} />
-                  </div>
+                  <div className="skeleton-btn pulse" />
                 </div>
-              </>
+              </div>
             )}
 
             {/* Error State */}
             {problems !== null && loadError && (
-              <div className="state-panel error-panel" role="alert">
+              <div className="state-panel error-panel dark-state" role="alert">
                 <h3 className="state-headline">SOMETHING WENT WRONG.</h3>
                 <p className="state-body">
                   Recall couldn't read your data. Your questions are safe. Try again.
@@ -696,7 +591,7 @@ export default function NewTabDashboard() {
                   </button>
                   <button
                     type="button"
-                    className="cta-secondary-link"
+                    className="cta-secondary-link light-link"
                     onClick={() => setActivePanel('about')}
                   >
                     ABOUT RECALL
@@ -707,7 +602,7 @@ export default function NewTabDashboard() {
 
             {/* Empty State: Zero Stored Questions */}
             {problems !== null && !loadError && totalTracked === 0 && (
-              <div className="state-panel">
+              <div className="state-panel dark-state">
                 <h3 className="state-headline">START YOUR LIBRARY.</h3>
                 <p className="state-body">
                   Recall tracks the problems you solve on LeetCode. Get your first Accepted submission,
@@ -724,7 +619,7 @@ export default function NewTabDashboard() {
                   </a>
                   <button
                     type="button"
-                    className="entry-open-btn secondary"
+                    className="hero-open-btn secondary"
                     onClick={triggerSync}
                     disabled={sync.status === 'running'}
                   >
@@ -736,7 +631,7 @@ export default function NewTabDashboard() {
 
             {/* Empty State: Tracked questions exist, but none eligible today */}
             {problems !== null && !loadError && totalTracked > 0 && selectedQuestions.length === 0 && (
-              <div className="state-panel">
+              <div className="state-panel dark-state">
                 <h3 className="state-headline">ALL CAUGHT UP.</h3>
                 <p className="state-body">
                   None of your solved problems are due for revision today. Come back tomorrow, or
@@ -744,7 +639,7 @@ export default function NewTabDashboard() {
                 </p>
                 <div className="state-actions">
                   <a
-                    className="entry-open-btn secondary"
+                    className="hero-open-btn secondary"
                     href={`${LEETCODE_BASE_URL}/problemset/all/`}
                     target="_blank"
                     rel="noreferrer"
@@ -755,9 +650,9 @@ export default function NewTabDashboard() {
               </div>
             )}
 
-            {/* Active Questions (1 or 2 entries) */}
+            {/* Selected Questions (Both accessible immediately) */}
             {problems !== null && !loadError && selectedQuestions.length > 0 && (
-              <>
+              <div className="hero-questions-list">
                 {selectedQuestions.map((rec, index) => {
                   const href = revisionSessionUrl(rec.url) ?? rec.url;
                   const topicsList = normalizeTopics(rec.topics);
@@ -771,27 +666,27 @@ export default function NewTabDashboard() {
                       href={href}
                       target="_blank"
                       rel="noreferrer"
-                      className="revision-entry-row"
+                      className="hero-question-row"
                       aria-label={`${index + 1}. ${rec.title || rec.problemId}. Topics: ${topicsList.join(', ')}. Difficulty: ${diff}. Opens LeetCode in a new tab.`}
                     >
-                      <div className="entry-index-col">
+                      <div className="hero-q-idx">
                         {String(index + 1).padStart(2, '0')}
                       </div>
 
-                      <div className="entry-content-col">
-                        <div className="entry-topics-line">
+                      <div className="hero-q-content">
+                        <div className="hero-q-topics">
                           {displayTopics ? `${displayTopics}${remainingTopics}` : 'OTHER'}
                         </div>
-                        <h3 className="entry-title">{rec.title || rec.problemId}</h3>
+                        <h2 className="hero-q-title">{rec.title || rec.problemId}</h2>
                         <div className="difficulty-marker">
                           <span
-                            className={`diff-dot ${diff === 'Hard' ? 'hard-filled' : 'filled'}`}
+                            className={`diff-dot dark-diff ${diff === 'Hard' ? 'hard-filled' : 'filled'}`}
                           />
                           <span
-                            className={`diff-dot ${diff === 'Hard' ? 'hard-filled' : diff === 'Medium' ? 'filled' : ''}`}
+                            className={`diff-dot dark-diff ${diff === 'Hard' ? 'hard-filled' : diff === 'Medium' ? 'filled' : ''}`}
                           />
                           <span
-                            className={`diff-dot ${diff === 'Hard' ? 'hard-filled' : ''}`}
+                            className={`diff-dot dark-diff ${diff === 'Hard' ? 'hard-filled' : ''}`}
                           />
                           <span className={`difficulty-name ${diff === 'Hard' ? 'hard' : ''}`}>
                             {diff.toUpperCase()}
@@ -799,35 +694,113 @@ export default function NewTabDashboard() {
                         </div>
                       </div>
 
-                      <div className="entry-action-col">
-                        <span className={`entry-open-btn ${index === 0 ? 'primary' : 'secondary'}`}>
+                      <div className="hero-q-action">
+                        <span className={`hero-open-btn ${index === 0 ? 'primary' : 'secondary'}`}>
                           OPEN ON LEETCODE
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <line x1="7" y1="17" x2="17" y2="7" />
                             <polyline points="7 7 17 7 17 17" />
                           </svg>
                         </span>
-                        <span className="entry-open-hint">OPENS IN NEW TAB</span>
+                        <span className="hero-open-hint">OPENS IN NEW TAB</span>
                       </div>
                     </a>
                   );
                 })}
 
-                {/* Quiet notice row when only 1 question is eligible */}
+                {/* Single selected notice */}
                 {selectedQuestions.length === 1 && (
-                  <div className="single-selected-notice">
+                  <div className="single-selected-notice dark-notice">
                     <span className="crimson-tick" />
                     ONLY ONE QUESTION WAS ELIGIBLE TODAY.
                   </div>
                 )}
-              </>
+              </div>
             )}
           </div>
         </div>
-      </main>
+
+        {/* Side navigation anchor discs at bottom edges */}
+        <button
+          type="button"
+          className="hero-edge-anchor left"
+          onClick={() => window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' })}
+          title="Scroll to top"
+          aria-label="Scroll to top"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="16,4 6,12 16,20" />
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          className="hero-edge-anchor right"
+          onClick={() => document.getElementById('next-move')?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' })}
+          title="Scroll to Next Move"
+          aria-label="Scroll to Next Move"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="8,4 18,12 8,20" />
+          </svg>
+        </button>
+      </section>
 
       {/* ====================================================================
-          4. PROGRESS SECTION (on canvas surface)
+          SECTION 2 — YOUR NEXT MOVE (Original large-scale landing-page section)
+          ==================================================================== */}
+      <section id="next-move" className="landing-next-move-section" aria-label="Your Next Move">
+        <div className="grid-container">
+          <div className="headline-row">
+            <h1 className="headline-h1">
+              <span>YOUR</span>
+              <span className="headline-connector">NEXT</span>
+              <span>MOVE.</span>
+            </h1>
+          </div>
+
+          <div className="headline-meta-row">
+            <div className="edition-label">EDITION · {weekdayName}</div>
+
+            <div className="intro-cta-box">
+              <p className="intro-lead">{introText}</p>
+
+              {firstQuestionUrl ? (
+                <a
+                  className="primary-cta-btn large-cta"
+                  href={firstQuestionUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  START REVISING
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <polyline points="12 5 19 12 12 19" />
+                  </svg>
+                </a>
+              ) : (
+                <button type="button" className="primary-cta-btn large-cta" disabled>
+                  {problems === null ? 'LOADING…' : 'NOTHING TO REVISE'}
+                </button>
+              )}
+
+              <a
+                href="#today"
+                className="cta-secondary-link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  document.getElementById('today')?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
+                }}
+              >
+                SEE TODAY'S QUESTIONS ↑
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ====================================================================
+          SECTION 3 — PROGRESS (Canvas surface, original generous spacing)
           ==================================================================== */}
       <section id="progress" className="progress-section" aria-label="Progress and Library Overview">
         <div className="grid-container">
@@ -919,7 +892,7 @@ export default function NewTabDashboard() {
       </section>
 
       {/* ====================================================================
-          5. WEEKLY ACTIVITY SECTION (on paper)
+          SECTION 4 — THIS WEEK (Paper surface, original generous spacing)
           ==================================================================== */}
       <section id="activity" className="weekly-activity-section" aria-label="Weekly Activity">
         <div className="grid-container">
@@ -969,7 +942,7 @@ export default function NewTabDashboard() {
       </section>
 
       {/* ====================================================================
-          6. SITE FOOTER (on bg-ink, rounded top corners matching hero)
+          SECTION 5 — SITE FOOTER (on bg-ink, rounded top corners)
           ==================================================================== */}
       <footer className="site-footer">
         <div className="grid-container">
@@ -1024,7 +997,7 @@ export default function NewTabDashboard() {
       </footer>
 
       {/* ====================================================================
-          7. SIDE PANELS (Settings / About Drawers)
+          SIDE PANELS (Settings / About Drawers)
           ==================================================================== */}
       {activePanel && (
         <div
@@ -1072,7 +1045,7 @@ export default function NewTabDashboard() {
                     </div>
                     <button
                       type="button"
-                      className="entry-open-btn secondary"
+                      className="hero-open-btn secondary"
                       onClick={triggerSync}
                       disabled={sync.status === 'running'}
                     >
@@ -1085,7 +1058,7 @@ export default function NewTabDashboard() {
                     <div className="drawer-row-info">
                       <span className="drawer-row-label">REDUCE MOTION</span>
                       <span className="drawer-row-desc">
-                        Disable parallax, transitions and count-up effects.
+                        Disable transitions and count-up effects.
                       </span>
                     </div>
                     <div
@@ -1123,7 +1096,7 @@ export default function NewTabDashboard() {
                   </div>
                 </>
               ) : (
-                /* About Panel Content (<= 90 words per §13) */
+                /* About Panel Content (<= 90 words) */
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16, fontSize: 14, lineHeight: 1.6 }}>
                   <p>
                     Recall tracks the problems you solve on LeetCode and schedules them for spaced revision.
