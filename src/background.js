@@ -11,6 +11,8 @@ import {
 } from './lib/messageValidation.js'
 import { enqueueOperation } from './lib/operationQueue.js'
 import { normalizeProblemUrl, recordAccepted } from './lib/tracker.js'
+import { toLocalDay } from './lib/revisionScheduler.js'
+import { recordRevision } from './lib/revisionTracking.js'
 
 const queue = { current: Promise.resolve() }
 
@@ -27,28 +29,24 @@ function storageArea() {
   return api
 }
 
-async function loadProblems() {
-  console.info('[Recall background] storage read started')
-  const result = await storageArea().get('problems')
-  console.info('[Recall background] storage read completed')
-  return result.problems ?? {}
-}
-
 async function loadState() {
-  const result = await storageArea().get(['problems', 'dailySelections'])
-  return { problems: result.problems ?? {}, dailySelections: result.dailySelections ?? {} }
+  const result = await storageArea().get(['problems', 'dailySelections', 'revisionActivity'])
+  return {
+    problems: result.problems ?? {},
+    dailySelections: result.dailySelections ?? {},
+    revisionActivity: Array.isArray(result.revisionActivity) ? result.revisionActivity : [],
+  }
 }
 
-async function saveState(problems, dailySelections) {
+async function saveState(problems, dailySelections, revisionActivity = null) {
   console.info('[Recall background] storage write started')
-  await storageArea().set({ problems, dailySelections })
+  const payload = { problems, dailySelections }
+  if (revisionActivity !== null) {
+    payload.revisionActivity = revisionActivity
+  }
+  await storageArea().set(payload)
   console.info('[Recall background] storage write completed')
   return problems
-}
-
-async function saveProblems(problems) {
-  const { dailySelections } = await loadState()
-  return saveState(problems, dailySelections)
 }
 
 function respond(sendResponse, operation) {
@@ -74,14 +72,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const event = msg.event
     if (!isAcceptedEvent(event)) return reject(sendResponse)
     return respond(sendResponse, async () => {
-      const problems = await loadProblems()
+      const state = await loadState()
+      const problems = state.problems
       const slug = event.problemId
       const next = recordAccepted(problems, {
         ...event,
         url: normalizeProblemUrl(slug),
       })
-      await saveProblems(next)
-      return { problems: next }
+
+      const todayDay = toLocalDay(new Date(event.at ?? Date.now()))
+      const isDailySelection = Boolean(state.dailySelections?.[todayDay]?.includes(slug))
+      const isTrackedProblem = Boolean(problems[slug])
+
+      let nextActivity = state.revisionActivity ?? []
+      if (isTrackedProblem || isDailySelection) {
+        const recorded = recordRevision(nextActivity, slug, todayDay, event.at)
+        nextActivity = recorded.nextActivity
+      }
+
+      await saveState(next, state.dailySelections, nextActivity)
+      return { problems: next, revisionActivity: nextActivity }
     })
   }
 

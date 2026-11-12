@@ -1,9 +1,10 @@
 // Pure revision-tracking logic — no DOM, no chrome.*.
 //
-// Records user-initiated revision completions and calculates revision metrics:
+// Shared single source of truth for:
 // - Unique revised problem count
-// - Consecutive calendar-day revision streaks
+// - Consecutive calendar-day revision streaks (with same-day grace preservation)
 // - Idempotent recording with same-day duplicate prevention
+// - Weekly activity calendar daily markers (max 2 per day, exactly 1 per distinct question)
 
 import { toLocalDay, addDays } from './revisionScheduler.js';
 
@@ -95,14 +96,45 @@ export function calculateUniqueRevisedCount(activity = [], problems = null) {
 }
 
 /**
+ * Returns a Set of all distinct local calendar dates ('YYYY-MM-DD') that have
+ * at least one revision recorded.
+ *
+ * @param {Array<{date: string}>} activity
+ * @returns {Set<string>}
+ */
+export function getActiveRevisionDates(activity = []) {
+  const dates = new Set();
+  if (!Array.isArray(activity)) return dates;
+  for (const entry of activity) {
+    if (entry?.date) {
+      dates.add(entry.date);
+    }
+  }
+  return dates;
+}
+
+/**
+ * Checks if a specific calendar day is active (has >= 1 recorded revision).
+ *
+ * @param {Array<{date: string}>} activity
+ * @param {string} [day]
+ * @returns {boolean}
+ */
+export function isDayActive(activity = [], day = toLocalDay()) {
+  if (!Array.isArray(activity) || activity.length === 0 || !day) return false;
+  return activity.some((entry) => entry?.date === day);
+}
+
+/**
  * Calculates the current consecutive calendar day revision streak.
  *
  * Rules:
- * - A day counts as active if >= 1 problem was marked as revised on that calendar day.
- * - Multiple revisions on the same calendar day count as one active day.
- * - Consecutive active calendar days increase the streak.
- * - If today has no revision activity, the current streak on today is 0 days.
- * - If today has revision activity, the streak is 1 + consecutive active days backwards.
+ * - At least one recorded revision today means today is active.
+ * - Consecutive active local calendar days increase the streak.
+ * - Multiple revisions on the same day count as one active day.
+ * - If today has no activity yet but yesterday was active, preserve the existing
+ *   streak until the local day ends (standard streak preservation convention).
+ * - If neither today nor yesterday has activity, the streak is broken (0 days).
  *
  * @param {Array<{date: string}>} activity
  * @param {string} [today] - 'YYYY-MM-DD' local date string
@@ -111,20 +143,20 @@ export function calculateUniqueRevisedCount(activity = [], problems = null) {
 export function calculateStreak(activity = [], today = toLocalDay()) {
   if (!Array.isArray(activity) || activity.length === 0 || !today) return 0;
 
-  const activeDays = new Set();
-  for (const entry of activity) {
-    if (entry?.date) {
-      activeDays.add(entry.date);
-    }
-  }
+  const activeDays = getActiveRevisionDates(activity);
 
-  // If the user has not revised anything today, current streak is 0.
-  if (!activeDays.has(today)) {
+  const isTodayActive = activeDays.has(today);
+  const yesterday = addDays(today, -1);
+  const isYesterdayActive = activeDays.has(yesterday);
+
+  // If neither today nor yesterday is active, the streak is 0
+  if (!isTodayActive && !isYesterdayActive) {
     return 0;
   }
 
+  // Count backwards starting from today (if today active) or yesterday (if today pending)
   let streak = 0;
-  let currentDay = today;
+  let currentDay = isTodayActive ? today : yesterday;
 
   while (activeDays.has(currentDay)) {
     streak += 1;
@@ -132,4 +164,78 @@ export function calculateStreak(activity = [], today = toLocalDay()) {
   }
 
   return streak;
+}
+
+/**
+ * Derives the calendar activity markers for a given day in the weekly strip.
+ *
+ * Requirements:
+ * - Exactly one marker per distinct question.
+ * - Maximum two markers per day (corresponding to the two daily revision questions).
+ * - Completed revision on that day -> 'completed' (filled square).
+ * - Question selected for that day but not revised -> 'pending' (outlined square).
+ * - Future days show no pending markers (not yet due).
+ *
+ * @param {Object} options
+ * @param {string} options.dayStr - 'YYYY-MM-DD'
+ * @param {Record<string, Array<string>>} [options.dailySelections]
+ * @param {Array<{problemId: string, date: string}>} [options.revisionActivity]
+ * @param {string} [options.todayDay]
+ * @returns {{ dayStr: string, isToday: boolean, isFuture: boolean, markers: Array<{problemId: string, status: 'completed'|'pending'}>, completedCount: number }}
+ */
+export function getCalendarDayActivity({
+  dayStr,
+  dailySelections = {},
+  revisionActivity = [],
+  todayDay = toLocalDay(),
+}) {
+  const isToday = dayStr === todayDay;
+  const isFuture = dayStr > todayDay;
+
+  // 1. Identify problems revised on this day
+  const revisedOnDay = Array.isArray(revisionActivity)
+    ? revisionActivity.filter((r) => r?.date === dayStr && r?.problemId)
+    : [];
+  const revisedProblemIds = Array.from(
+    new Set(revisedOnDay.map((r) => String(r.problemId)))
+  );
+
+  // 2. Identify problems selected for this day
+  const rawSelected = dailySelections?.[dayStr] ?? [];
+  const selectedProblemIds = Array.isArray(rawSelected)
+    ? Array.from(new Set(rawSelected.map((id) => String(id)).filter(Boolean)))
+    : [];
+
+  // 3. Assemble distinct daily questions for this day (capped at 2)
+  // Revisions on this day take precedence for representation
+  const distinctIds = [...revisedProblemIds];
+  for (const id of selectedProblemIds) {
+    if (!distinctIds.includes(id)) {
+      distinctIds.push(id);
+    }
+  }
+
+  const cappedIds = distinctIds.slice(0, 2);
+
+  // 4. Map each distinct question to exactly one marker
+  const markers = [];
+  for (const id of cappedIds) {
+    const isRevised = revisedProblemIds.includes(id);
+    if (isRevised) {
+      markers.push({ problemId: id, status: 'completed' });
+    } else if (!isFuture) {
+      // Pending markers appear for today and past days, never future days
+      markers.push({ problemId: id, status: 'pending' });
+    }
+  }
+
+  const completedCount = markers.filter((m) => m.status === 'completed').length;
+
+  return {
+    dayStr,
+    isToday,
+    isFuture,
+    markers,
+    completedCount,
+  };
 }

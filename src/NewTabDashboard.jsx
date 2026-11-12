@@ -7,6 +7,8 @@ import { historySyncState } from './lib/historySync.js';
 import {
   calculateStreak,
   calculateUniqueRevisedCount,
+  getCalendarDayActivity,
+  isDayActive,
   isProblemRevisedOnDate,
   recordRevision,
   REVISION_ACTIVITY_STORAGE_KEY,
@@ -70,6 +72,7 @@ function getWeekColumns(todayDay) {
 export default function NewTabDashboard() {
   const [problems, setProblems] = useState(null); // null = loading
   const [selection, setSelection] = useState([]);
+  const [dailySelections, setDailySelections] = useState({});
   const [revisionActivity, setRevisionActivity] = useState([]);
   const [todayDay, setTodayDay] = useState(() => toLocalDay(new Date()));
   const [loadError, setLoadError] = useState(false);
@@ -91,6 +94,7 @@ export default function NewTabDashboard() {
         if (!storage) {
           setProblems({});
           setSelection([]);
+          setDailySelections({});
           setRevisionActivity([]);
           return;
         }
@@ -108,6 +112,7 @@ export default function NewTabDashboard() {
 
         const storedProblems = storage.problems ?? {};
         const storedSelections = storage.dailySelections ?? {};
+        setDailySelections(storedSelections);
 
         if (storedSelections[currentToday] !== undefined) {
           setProblems(storedProblems);
@@ -139,6 +144,7 @@ export default function NewTabDashboard() {
         setLoadError(true);
         setProblems({});
         setSelection([]);
+        setDailySelections({});
         setRevisionActivity([]);
       });
   };
@@ -151,6 +157,7 @@ export default function NewTabDashboard() {
       const fallbackTimer = setTimeout(() => {
         setProblems({});
         setSelection([]);
+        setDailySelections({});
         setRevisionActivity([]);
       }, 0);
       return () => clearTimeout(fallbackTimer);
@@ -171,6 +178,7 @@ export default function NewTabDashboard() {
 
         const storedProblems = storage.problems ?? {};
         const storedSelections = storage.dailySelections ?? {};
+        setDailySelections(storedSelections);
 
         if (storedSelections[currentToday] !== undefined) {
           setProblems(storedProblems);
@@ -202,6 +210,7 @@ export default function NewTabDashboard() {
         setLoadError(true);
         setProblems({});
         setSelection([]);
+        setDailySelections({});
         setRevisionActivity([]);
       });
 
@@ -223,6 +232,9 @@ export default function NewTabDashboard() {
       if (area !== 'local') return;
       if (changes.problems || changes.dailySelections) {
         loadData();
+      }
+      if (changes.dailySelections) {
+        setDailySelections(changes.dailySelections.newValue || {});
       }
       if (changes[REVISION_ACTIVITY_STORAGE_KEY]) {
         setRevisionActivity(changes[REVISION_ACTIVITY_STORAGE_KEY].newValue || []);
@@ -320,6 +332,11 @@ export default function NewTabDashboard() {
     [revisionActivity, todayDay]
   );
 
+  const isTodayActive = useMemo(
+    () => isDayActive(revisionActivity, todayDay),
+    [revisionActivity, todayDay]
+  );
+
   // Mark a problem as revised today (with idempotent duplicate protection)
   const handleMarkRevised = async (problemId) => {
     if (!problemId) return;
@@ -383,25 +400,32 @@ export default function NewTabDashboard() {
     };
   }, [problems]);
 
-  // Activity by day of week
+  // Activity by day of week (shared source of truth with progress and revision metrics)
   const weekColumns = useMemo(() => {
     const cols = getWeekColumns(todayDay);
-    const solvesByDay = {};
-    for (const rec of Object.values(problems ?? {})) {
-      const dateStr = rec?.firstSolvedAt ? toLocalDay(new Date(rec.firstSolvedAt)) : null;
-      if (dateStr) {
-        solvesByDay[dateStr] = (solvesByDay[dateStr] || 0) + 1;
-      }
-    }
+    const mergedSelections = {
+      ...dailySelections,
+      [todayDay]: selection,
+    };
 
-    return cols.map((col) => ({
-      ...col,
-      solveCount: solvesByDay[col.dayStr] || 0,
-      hasRecordedSolves: Object.keys(solvesByDay).length > 0,
-    }));
-  }, [problems, todayDay]);
+    return cols.map((col) => {
+      const activity = getCalendarDayActivity({
+        dayStr: col.dayStr,
+        dailySelections: mergedSelections,
+        revisionActivity,
+        todayDay,
+      });
 
-  const anyRecordedSolvesInWeek = weekColumns.some((col) => col.solveCount > 0);
+      return {
+        ...col,
+        markers: activity.markers,
+        completedCount: activity.completedCount,
+        hasActivity: activity.markers.length > 0,
+      };
+    });
+  }, [dailySelections, revisionActivity, todayDay, selection]);
+
+  const anyActivityInWeek = weekColumns.some((col) => col.hasActivity);
 
   // Keyboard navigation & drawer ESC handling
   useEffect(() => {
@@ -976,7 +1000,11 @@ export default function NewTabDashboard() {
                     {currentStreak} <span className="stat-unit">DAYS</span>
                   </div>
                   <span className="stat-card-sublabel">
-                    {currentStreak > 0 ? 'CONSECUTIVE DAYS' : 'NO REVISION TODAY'}
+                    {currentStreak > 0
+                      ? isTodayActive
+                        ? 'CONSECUTIVE DAYS'
+                        : 'EXTEND TODAY'
+                      : 'START TODAY'}
                   </span>
                 </div>
                 <span className="stat-card-status">DAILY STREAK</span>
@@ -1004,8 +1032,8 @@ export default function NewTabDashboard() {
               <div
                 key={col.dayStr}
                 className={`day-column ${col.isToday ? 'is-today' : ''} ${col.isFuture ? 'is-future' : ''}`}
-                tabIndex={col.solveCount > 0 ? 0 : undefined}
-                title={col.solveCount > 0 ? `${col.solveCount} SOLVED` : undefined}
+                tabIndex={col.completedCount > 0 ? 0 : undefined}
+                title={col.completedCount > 0 ? `${col.completedCount} REVISED` : undefined}
               >
                 <div className="day-col-header">
                   <span className="day-col-name">{col.weekday}</span>
@@ -1013,25 +1041,22 @@ export default function NewTabDashboard() {
                 </div>
 
                 <div className="day-marker-area">
-                  {/* Solves recorded on this day */}
-                  {Array.from({ length: Math.min(8, col.solveCount) }).map((_, i) => (
-                    <span key={i} className="activity-square" />
+                  {col.markers.map((marker) => (
+                    <span
+                      key={marker.problemId}
+                      className={`activity-square ${marker.status === 'pending' ? 'outlined' : ''}`}
+                      title={marker.status === 'completed' ? 'Revised' : 'Pending revision'}
+                    />
                   ))}
-
-                  {/* Today's selected question count markers */}
-                  {col.isToday &&
-                    Array.from({ length: selectedQuestions.length }).map((_, i) => (
-                      <span key={`sel-${i}`} className="activity-square outlined" title="Selected today" />
-                    ))}
                 </div>
               </div>
             ))}
           </div>
 
           <div className="activity-caption-row">
-            {anyRecordedSolvesInWeek
-              ? 'SHOWING SOLVES RECORDED BY RECALL'
-              : 'ACTIVITY HISTORY COMING SOON'}
+            {anyActivityInWeek
+              ? 'SHOWING REVISIONS RECORDED BY RECALL'
+              : 'ACTIVITY RECORDED AS YOU REVISE'}
           </div>
         </div>
       </section>
