@@ -109,7 +109,7 @@ See [PRIVACY.md](PRIVACY.md) for the detailed privacy policy.
 - Automatic tracking depends on LeetCode's page interface: Recall needs to observe the real Submit action and an exact `Accepted` verdict. A changed, hidden, or otherwise unobservable result can be missed and should be recovered with **Sync LeetCode History**.
 - Starting a fresh attempt may replace the current draft for the selected language through LeetCode's native reset control. Recall does not click **Retrieve last submitted code**, reset other languages, or submit code automatically.
 - Recall is not currently available through the Chrome Web Store.
-- **Support Recall** is currently a disabled placeholder because `SUPPORT_URL` is not configured.
+- Users can voluntarily support Recall through its Razorpay payment page.
 
 ## Contributing
 
