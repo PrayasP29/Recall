@@ -5,7 +5,7 @@ import { primaryTopic } from './lib/patterns.js'
 import { revisionSessionUrl } from './lib/revisionSession.js'
 import { historySyncState } from './lib/historySync.js'
 import { getBrowserAPI } from './lib/browserApi.js'
-import logo from './assets/logo.png'
+import logo from './assets/popup-logo.jpg'
 
 // ponytail: set SUPPORT_URL to the real support page before release.
 // While null the button renders disabled and links nowhere — intentional,
@@ -196,7 +196,7 @@ function App() {
 
       <footer>
         {SUPPORT_URL ? (
-          <a className="open support" href={SUPPORT_URL} target="_blank" rel="noreferrer">
+          <a className="open support" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer">
             Support Recall
           </a>
         ) : (

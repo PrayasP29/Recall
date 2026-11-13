@@ -1121,7 +1121,7 @@ export default function NewTabDashboard() {
               <a
                 href={SUPPORT_URL}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="footer-link"
               >
                 SUPPORT RECALL
