@@ -2,6 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   classifyVerdict,
+  isSubmitElement,
+  isSubmitShortcut,
+  findVerdictInRecords,
   slugFromPathname,
   normalizeProblemUrl,
   titleFromDocumentTitle,
@@ -25,7 +28,9 @@ test('unsuccessful verdicts are ignored', () => {
     'Time Limit Exceeded',
     'Memory Limit Exceeded',
     'Compile Error',
+    'Compilation Error',
     'Pending',
+    'Judging',
     'Accepted solution pattern', // substring must not match
     '',
   ]) {
@@ -33,6 +38,84 @@ test('unsuccessful verdicts are ignored', () => {
   }
   assert.equal(classifyVerdict('Wrong Answer'), 'rejected')
   assert.equal(classifyVerdict('Runtime Error'), 'rejected')
+  assert.equal(classifyVerdict('Compilation Error'), 'rejected')
+  assert.equal(classifyVerdict('Pending'), null)
+})
+
+test('isSubmitElement identifies submit buttons and nested icons/spans', () => {
+  // Mock element with closest and getAttribute
+  function mockElement({ tag = 'BUTTON', text = '', attrs = {}, parent = null }) {
+    const el = {
+      tagName: tag,
+      textContent: text,
+      getAttribute(k) { return attrs[k] ?? null },
+      parentElement: parent,
+      closest(sel) {
+        if (sel.includes('button') && el.tagName === 'BUTTON') return el
+        if (attrs['data-e2e-locator']?.includes('submit') || attrs['data-cypress']?.includes('submit')) return el
+        return parent ? parent.closest(sel) : null
+      },
+    }
+    return el
+  }
+
+  // 1. Direct submit button
+  const btn1 = mockElement({ tag: 'BUTTON', text: 'Submit' })
+  assert.equal(isSubmitElement(btn1), true)
+
+  // 2. Submit with shortcut in text
+  const btn2 = mockElement({ tag: 'BUTTON', text: 'Submit (Ctrl + Enter)' })
+  assert.equal(isSubmitElement(btn2), true)
+
+  // 3. Nested path inside svg inside button
+  const rootBtn = mockElement({ tag: 'BUTTON', attrs: { 'data-e2e-locator': 'console-submit-button' }, text: 'Submit' })
+  const svg = mockElement({ tag: 'SVG', parent: rootBtn })
+  const path = mockElement({ tag: 'PATH', parent: svg })
+  assert.equal(isSubmitElement(path), true)
+
+  // 4. Non-submit buttons
+  const runBtn = mockElement({ tag: 'BUTTON', text: 'Run Code' })
+  assert.equal(isSubmitElement(runBtn), false)
+
+  const nullEl = null
+  assert.equal(isSubmitElement(nullEl), false)
+})
+
+test('isSubmitShortcut detects Ctrl+Enter and Cmd+Enter', () => {
+  assert.equal(isSubmitShortcut({ key: 'Enter', ctrlKey: true }), true)
+  assert.equal(isSubmitShortcut({ key: 'Enter', metaKey: true }), true)
+  assert.equal(isSubmitShortcut({ code: 'Enter', ctrlKey: true }), true)
+  assert.equal(isSubmitShortcut({ key: 'Enter', ctrlKey: false, metaKey: false }), false)
+  assert.equal(isSubmitShortcut({ key: 'a', ctrlKey: true }), false)
+  assert.equal(isSubmitShortcut(null), false)
+})
+
+test('findVerdictInRecords accurately extracts verdict from DOM mutations', () => {
+  // Case A: characterData mutation with Accepted
+  const recA = [{ type: 'characterData', target: { textContent: 'Accepted' } }]
+  assert.equal(findVerdictInRecords(recA), 'accepted')
+
+  // Case B: addedNodes with text node 'Accepted'
+  const textNode = { nodeType: 3, textContent: 'Accepted' }
+  const recB = [{ type: 'childList', addedNodes: [textNode] }]
+  assert.equal(findVerdictInRecords(recB), 'accepted')
+
+  // Case C: addedNodes with submission-result element containing 'Accepted'
+  const elemNode = {
+    nodeType: 1,
+    textContent: 'Accepted',
+    getAttribute(k) { return k === 'data-e2e-locator' ? 'submission-result' : null },
+  }
+  const recC = [{ type: 'childList', addedNodes: [elemNode] }]
+  assert.equal(findVerdictInRecords(recC), 'accepted')
+
+  // Case D: addedNodes with Wrong Answer
+  const recD = [{ type: 'characterData', target: { textContent: 'Wrong Answer' } }]
+  assert.equal(findVerdictInRecords(recD), 'rejected')
+
+  // Case E: Pending / Judging states return null
+  const recE = [{ type: 'characterData', target: { textContent: 'Pending' } }]
+  assert.equal(findVerdictInRecords(recE), null)
 })
 
 test('problem slugs come from every problem subpage, nowhere else', () => {

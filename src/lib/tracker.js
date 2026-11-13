@@ -12,15 +12,112 @@ const REJECTED_TEXT = new Set([
   'Runtime Error',
   'Memory Limit Exceeded',
   'Compile Error',
+  'Compilation Error',
   'Output Limit Exceeded',
+  'Internal Error',
 ])
 
 // 'accepted' | 'rejected' | null. Exact trimmed match only — a colored
 // element or substring ("Accepted solution pattern") never classifies.
 export function classifyVerdict(text) {
-  const t = typeof text === 'string' ? text.trim() : ''
-  if (t === ACCEPTED_TEXT) return 'accepted'
-  if (REJECTED_TEXT.has(t)) return 'rejected'
+  if (typeof text !== 'string') return null
+  const t = text.replace(/\u00a0/g, ' ').trim()
+  if (t === ACCEPTED_TEXT || t.toLowerCase() === 'accepted') return 'accepted'
+  for (const r of REJECTED_TEXT) {
+    if (t.toLowerCase() === r.toLowerCase()) return 'rejected'
+  }
+  return null
+}
+
+/**
+ * Determines whether a clicked DOM element corresponds to LeetCode's Submit button.
+ * Handles nested elements (icons, paths, inner spans), data-attributes, aria labels, and text.
+ */
+export function isSubmitElement(element) {
+  if (!element || typeof element.closest !== 'function') return false
+
+  const btn = element.closest('button, [role="button"], [data-e2e-locator*="submit"], [data-cypress*="submit"]')
+  if (!btn) return false
+
+  // 1. Data attributes
+  const e2e = (btn.getAttribute('data-e2e-locator') || '').toLowerCase()
+  const cypress = (btn.getAttribute('data-cypress') || '').toLowerCase()
+  const testId = (btn.getAttribute('data-testid') || '').toLowerCase()
+  if (e2e.includes('submit') || cypress.includes('submit') || testId.includes('submit')) {
+    return true
+  }
+
+  // 2. Aria labels and titles
+  const aria = (btn.getAttribute('aria-label') || '').toLowerCase()
+  const title = (btn.getAttribute('title') || '').toLowerCase()
+  if (/submit/i.test(aria) || /submit/i.test(title)) {
+    return true
+  }
+
+  // 3. Text content
+  const text = (btn.textContent || '').trim().toLowerCase()
+  if (/^submit(\b|\s|\(|$)/i.test(text)) {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * Determines whether a keyboard event corresponds to LeetCode's submission shortcut (Ctrl+Enter or Cmd+Enter).
+ */
+export function isSubmitShortcut(event) {
+  if (!event) return false
+  const isEnter = event.key === 'Enter' || event.code === 'Enter'
+  const hasModifier = Boolean(event.ctrlKey || event.metaKey)
+  return isEnter && hasModifier
+}
+
+/**
+ * Inspects a list of MutationObserver records for final verdicts ('accepted' | 'rejected').
+ * Ignores pending/judging states.
+ */
+export function findVerdictInRecords(records) {
+  if (!records || !Array.isArray(records)) return null
+
+  for (const rec of records) {
+    if (rec.type === 'characterData') {
+      const v = classifyVerdict(rec.target?.textContent)
+      if (v) return v
+      continue
+    }
+
+    if (rec.addedNodes) {
+      for (const node of rec.addedNodes) {
+        if (!node) continue
+        if (node.nodeType === 3 /* Node.TEXT_NODE */) {
+          const v = classifyVerdict(node.textContent)
+          if (v) return v
+        } else if (node.nodeType === 1 /* Node.ELEMENT_NODE */) {
+          if (typeof node.getAttribute === 'function') {
+            const locator = (node.getAttribute('data-e2e-locator') || '').toLowerCase()
+            const cypress = (node.getAttribute('data-cypress') || '').toLowerCase()
+            if (locator.includes('submission-result') || cypress.includes('submission-result')) {
+              const v = classifyVerdict(node.textContent)
+              if (v) return v
+            }
+          }
+
+          if (typeof document !== 'undefined' && typeof document.createTreeWalker === 'function') {
+            const walker = document.createTreeWalker(node, 4 /* NodeFilter.SHOW_TEXT */)
+            let t
+            while ((t = walker.nextNode())) {
+              const v = classifyVerdict(t.textContent)
+              if (v) return v
+            }
+          } else if (node.textContent) {
+            const v = classifyVerdict(node.textContent)
+            if (v) return v
+          }
+        }
+      }
+    }
+  }
   return null
 }
 

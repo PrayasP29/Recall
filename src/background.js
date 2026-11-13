@@ -12,7 +12,7 @@ import {
 import { enqueueOperation } from './lib/operationQueue.js'
 import { normalizeProblemUrl, recordAccepted } from './lib/tracker.js'
 import { toLocalDay } from './lib/revisionScheduler.js'
-import { recordRevision } from './lib/revisionTracking.js'
+import { recordAcceptedRevision } from './lib/revisionTracking.js'
 import { getStorageArea } from './lib/browserApi.js'
 import {
   getSessionShownInMemory,
@@ -253,14 +253,14 @@ api?.runtime?.onMessage?.addListener((msg, sender, sendResponse) => {
       })
 
       const todayDay = toLocalDay(new Date(event.at ?? Date.now()))
-      const isDailySelection = Boolean(state.dailySelections?.[todayDay]?.includes(slug))
-      const isTrackedProblem = Boolean(problems[slug])
-
-      let nextActivity = state.revisionActivity ?? []
-      if (isTrackedProblem || isDailySelection) {
-        const recorded = recordRevision(nextActivity, slug, todayDay, event.at)
-        nextActivity = recorded.nextActivity
-      }
+      const { nextActivity } = recordAcceptedRevision({
+        problems,
+        dailySelections: state.dailySelections,
+        revisionActivity: state.revisionActivity ?? [],
+        problemId: slug,
+        date: todayDay,
+        timestamp: event.at,
+      })
 
       await saveState(next, state.dailySelections, nextActivity)
       return { problems: next, revisionActivity: nextActivity }
