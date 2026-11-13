@@ -26,6 +26,7 @@ const QUOTES = [
 
 const GITHUB_REPO_URL = 'https://github.com/PrayasP29/Recall';
 const LEETCODE_BASE_URL = 'https://leetcode.com';
+const SUPPORT_URL = 'https://rzp.io/rzp/support-recall';
 const EXTENSION_VERSION = 'v1.0.2';
 
 function getIssueDetails(date) {
@@ -1117,6 +1118,14 @@ export default function NewTabDashboard() {
               >
                 ABOUT RECALL
               </button>
+              <a
+                href={SUPPORT_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="footer-link"
+              >
+                SUPPORT RECALL
+              </a>
             </div>
           </div>
 

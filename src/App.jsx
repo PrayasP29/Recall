@@ -10,7 +10,7 @@ import logo from './assets/logo.png'
 // ponytail: set SUPPORT_URL to the real support page before release.
 // While null the button renders disabled and links nowhere — intentional,
 // so we never ship a placeholder URL that looks like a real destination.
-const SUPPORT_URL = null
+const SUPPORT_URL = 'https://rzp.io/rzp/support-recall'
 
 const label = (rec) => rec.title || rec.problemId
 
