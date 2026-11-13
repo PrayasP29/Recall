@@ -13,20 +13,192 @@ import { enqueueOperation } from './lib/operationQueue.js'
 import { normalizeProblemUrl, recordAccepted } from './lib/tracker.js'
 import { toLocalDay } from './lib/revisionScheduler.js'
 import { recordRevision } from './lib/revisionTracking.js'
+import { getStorageArea } from './lib/browserApi.js'
+import {
+  getSessionShownInMemory,
+  setSessionShownInMemory,
+  hasSessionShown,
+  markSessionShown,
+  resetSessionState,
+  shouldInterceptTab,
+  isRecallUrl,
+} from './lib/sessionManager.js'
 
 const queue = { current: Promise.resolve() }
 
+const api = globalThis.browser ?? globalThis.chrome
+
 console.info(
-  '[Recall background] service worker loaded',
-  `storage=${typeof globalThis.chrome?.storage?.local === 'object' ? 'available' : 'unavailable'}`,
+  '[Recall background] background coordinator loaded',
+  `storage=${typeof api?.storage?.local === 'object' ? 'available' : 'unavailable'}`,
 )
 
 function storageArea() {
-  const api = globalThis.chrome?.storage?.local
-  if (!api || typeof api.get !== 'function' || typeof api.set !== 'function') {
-    throw new Error('Chrome storage API unavailable in the Recall service worker.')
+  const local = getStorageArea('local')
+  if (!local || typeof local.get !== 'function' || typeof local.set !== 'function') {
+    throw new Error('Storage API unavailable in the Recall background script.')
   }
-  return api
+  return local
+}
+
+// ---------------------------------------------------------------------------
+// ONCE-PER-SESSION NEW TAB INTERCEPTION WITH COMPREHENSIVE DEBUG LOGGING
+// ---------------------------------------------------------------------------
+let isNavigating = false
+
+function sessionLog(message, details = null) {
+  if (details !== null && details !== undefined) {
+    console.info(`[Recall session] ${message}`, details)
+  } else {
+    console.info(`[Recall session] ${message}`)
+  }
+}
+
+async function maybeInterceptTab(tab, triggerEvent = 'unknown') {
+  if (!tab || typeof tab.id !== 'number') return
+
+  const tabId = tab.id
+  const initialUrl = tab.url || ''
+  const pendingUrl = tab.pendingUrl || ''
+
+  sessionLog(`Tab event [${triggerEvent}] received for tab #${tabId}`, {
+    tabId,
+    initialUrl,
+    pendingUrl,
+  })
+
+  // 1. Fast synchronous in-memory check
+  if (getSessionShownInMemory()) {
+    sessionLog(`Subsequent tab ignored: Recall already shown in this browser session (in-memory latch)`, {
+      tabId,
+    })
+    return
+  }
+
+  // 2. Concurrency lock: another tab is currently being redirected
+  if (isNavigating) {
+    sessionLog(`Subsequent tab ignored: another tab is currently in active navigation to Recall`, {
+      tabId,
+    })
+    return
+  }
+
+  // 3. Persistent session storage check (survives service worker suspensions)
+  const sessionStorage = getStorageArea('session')
+  const shown = await hasSessionShown(sessionStorage)
+  sessionLog(`Session flag inspection for tab #${tabId}`, {
+    tabId,
+    shownInStorage: shown,
+    shownInMemory: getSessionShownInMemory(),
+  })
+
+  if (shown) {
+    setSessionShownInMemory(true)
+    sessionLog(`Subsequent tab ignored: Recall already shown in this browser session (session storage)`, {
+      tabId,
+    })
+    return
+  }
+
+  if (!api?.tabs) {
+    sessionLog(`Tabs API unavailable; skipping tab #${tabId}`)
+    return
+  }
+
+  // 4. Duplicate check: is Recall already open in any existing tab in any window?
+  let isRecallAlreadyOpen = false
+  try {
+    const existing = await api.tabs.query({})
+    if (Array.isArray(existing)) {
+      isRecallAlreadyOpen = existing.some((t) => {
+        const u = t.url || t.pendingUrl || ''
+        return isRecallUrl(u)
+      })
+    }
+  } catch (err) {
+    sessionLog(`Warning: failed to query tabs for duplicate check`, err)
+  }
+
+  if (isRecallAlreadyOpen) {
+    sessionLog(`Subsequent tab ignored: Recall is already open in another tab. Marking session shown to prevent future opens.`, {
+      tabId,
+    })
+    setSessionShownInMemory(true)
+    await markSessionShown(sessionStorage)
+    return
+  }
+
+  // 5. Interception eligibility check
+  const shouldIntercept = shouldInterceptTab({
+    url: initialUrl,
+    pendingUrl,
+    hasShownInSession: shown,
+    isNavigating,
+    isRecallAlreadyOpen,
+  })
+
+  sessionLog(`Interception decision for tab #${tabId}`, {
+    tabId,
+    shouldIntercept,
+    initialUrl,
+    pendingUrl,
+    hasShownInSession: shown,
+    isNavigating,
+    isRecallAlreadyOpen,
+  })
+
+  if (!shouldIntercept) {
+    sessionLog(`Tab #${tabId} ignored: URL is not a recognized native new tab target`)
+    return
+  }
+
+  // 6. SYNCHRONOUSLY claim navigation lock and mark session shown BEFORE calling tabs.update
+  // This guarantees that any subsequent tab creation occurring in the next millisecond
+  // will immediately see sessionShown=true and be ignored without race conditions.
+  isNavigating = true
+  setSessionShownInMemory(true)
+  await markSessionShown(sessionStorage)
+
+  try {
+    const targetUrl = api.runtime.getURL('newtab.html')
+    sessionLog(`Navigating tab #${tabId} to Recall: ${targetUrl}`)
+    await api.tabs.update(tabId, { url: targetUrl })
+    sessionLog(`SUCCESS: Tab #${tabId} opened Recall New Tab`)
+  } catch (err) {
+    console.warn(`[Recall session] Failed to redirect tab #${tabId}`, err)
+  } finally {
+    isNavigating = false
+  }
+}
+
+if (api?.tabs?.onCreated) {
+  api.tabs.onCreated.addListener((tab) => {
+    maybeInterceptTab(tab, 'tabs.onCreated')
+  })
+}
+
+if (api?.tabs?.onUpdated) {
+  api.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    // Only inspect if URL changed and is not already a Recall page
+    if (changeInfo.url && !isRecallUrl(changeInfo.url)) {
+      maybeInterceptTab({ ...tab, id: tabId, url: changeInfo.url }, 'tabs.onUpdated')
+    }
+  })
+}
+
+if (api?.runtime?.onStartup) {
+  api.runtime.onStartup.addListener(async () => {
+    sessionLog('Browser startup event received. Clearing in-memory session latch.')
+    setSessionShownInMemory(false)
+    const sessionStorage = getStorageArea('session')
+    await resetSessionState(sessionStorage)
+  })
+}
+
+if (api?.runtime?.onInstalled) {
+  api.runtime.onInstalled.addListener((details) => {
+    sessionLog(`Extension installed/updated event (${details?.reason})`)
+  })
 }
 
 async function loadState() {
@@ -64,8 +236,8 @@ function reject(sendResponse, message = 'Invalid message payload.') {
   return true
 }
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (sender?.id !== chrome.runtime.id) return
+api?.runtime?.onMessage?.addListener((msg, sender, sendResponse) => {
+  if (sender?.id !== api.runtime.id) return
   console.info('[Recall background] message received', msg?.type ?? 'unknown')
 
   if (msg?.type === 'RECALL_RECORD_ACCEPTED') {

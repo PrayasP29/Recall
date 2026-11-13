@@ -563,11 +563,13 @@ function addRevisionModal() {
 
 addRevisionModal()
 
+const browserApi = globalThis.browser ?? globalThis.chrome
+
 async function recordAccepted(slug) {
   const { title, difficulty, topics } = pageMeta()
   try {
     console.info('[Recall content] accepted verdict detected; sending record request', slug)
-    const response = await sendExtensionMessage(chrome.runtime, {
+    const response = await sendExtensionMessage(browserApi?.runtime, {
       type: 'RECALL_RECORD_ACCEPTED',
       event: {
         problemId: slug,
@@ -644,9 +646,9 @@ async function fetchSolvedPage(skip, limit) {
 
 let syncing = false
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+browserApi?.runtime?.onMessage?.addListener((msg, sender, sendResponse) => {
   // Only this extension's popup may trigger a sync; ignore unknown messages.
-  if (msg?.type !== 'RECALL_SYNC_HISTORY' || sender?.id !== chrome.runtime.id) return
+  if (msg?.type !== 'RECALL_SYNC_HISTORY' || sender?.id !== browserApi?.runtime?.id) return
   if (syncing) {
     sendResponse({ status: 'error', code: 'busy', message: ERROR_MESSAGES.busy })
     return
@@ -656,7 +658,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     fetchPage: fetchSolvedPage,
     onProgress: (p) => {
       try {
-        chrome.runtime.sendMessage({ type: 'RECALL_SYNC_PROGRESS', ...p }, () => void chrome.runtime.lastError)
+        browserApi?.runtime?.sendMessage({ type: 'RECALL_SYNC_PROGRESS', ...p }, () => void browserApi?.runtime?.lastError)
       } catch {
         // popup closed mid-sync - the import still finishes and is saved
       }
@@ -664,7 +666,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   })
     .then(async (result) => {
       if (result.status === 'error') return result
-      const merged = await sendExtensionMessage(chrome.runtime, {
+      const merged = await sendExtensionMessage(browserApi?.runtime, {
         type: 'RECALL_MERGE_HISTORY',
         questions: result.questions,
         importStatus: result.status,

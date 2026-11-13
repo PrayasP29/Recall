@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './NewTabDashboard.css';
 import { toLocalDay } from './lib/revisionScheduler.js';
 import { normalizeTopics } from './lib/patterns.js';
@@ -13,6 +13,7 @@ import {
   recordRevision,
   REVISION_ACTIVITY_STORAGE_KEY,
 } from './lib/revisionTracking.js';
+import { getBrowserAPI, getStorageArea } from './lib/browserApi.js';
 
 // Background motif
 import backdropCircles from './assets/backdrop-circles.svg';
@@ -70,6 +71,8 @@ function getWeekColumns(todayDay) {
 }
 
 export default function NewTabDashboard() {
+  const api = useMemo(() => getBrowserAPI(), []);
+  const storageLocal = useMemo(() => getStorageArea('local'), []);
   const [problems, setProblems] = useState(null); // null = loading
   const [selection, setSelection] = useState([]);
   const [dailySelections, setDailySelections] = useState({});
@@ -85,11 +88,19 @@ export default function NewTabDashboard() {
   const heroBlockRef = useRef(null);
 
   // Initialize and load stored data
-  const loadData = () => {
+  const loadData = useCallback(() => {
     const currentToday = toLocalDay(new Date());
     setTodayDay(currentToday);
 
-    chrome?.storage?.local?.get(['problems', 'dailySelections', 'recall_reduce_motion', REVISION_ACTIVITY_STORAGE_KEY])
+    if (!storageLocal) {
+      setProblems({});
+      setSelection([]);
+      setDailySelections({});
+      setRevisionActivity([]);
+      return;
+    }
+
+    storageLocal.get(['problems', 'dailySelections', 'recall_reduce_motion', REVISION_ACTIVITY_STORAGE_KEY])
       .then((storage) => {
         if (!storage) {
           setProblems({});
@@ -122,7 +133,7 @@ export default function NewTabDashboard() {
 
         // If selection is not yet created for today, wait up to 1.5s then request from background
         setTimeout(() => {
-          chrome.runtime?.sendMessage({
+          api?.runtime?.sendMessage?.({
             type: 'RECALL_GET_DAILY_SELECTION',
             todayDay: currentToday,
           }).then((res) => {
@@ -147,12 +158,12 @@ export default function NewTabDashboard() {
         setDailySelections({});
         setRevisionActivity([]);
       });
-  };
+  }, [api, storageLocal]);
 
   useEffect(() => {
     const currentToday = toLocalDay(new Date());
 
-    if (!chrome?.storage?.local) {
+    if (!storageLocal) {
       // In dev/test preview outside extension
       const fallbackTimer = setTimeout(() => {
         setProblems({});
@@ -163,7 +174,7 @@ export default function NewTabDashboard() {
       return () => clearTimeout(fallbackTimer);
     }
 
-    chrome.storage.local.get(['problems', 'dailySelections', 'recall_reduce_motion', REVISION_ACTIVITY_STORAGE_KEY])
+    storageLocal.get(['problems', 'dailySelections', 'recall_reduce_motion', REVISION_ACTIVITY_STORAGE_KEY])
       .then((storage) => {
         if (storage.recall_reduce_motion !== undefined) {
           setReduceMotion(Boolean(storage.recall_reduce_motion));
@@ -188,7 +199,7 @@ export default function NewTabDashboard() {
 
         // Wait up to 1.5s before querying background
         setTimeout(() => {
-          chrome.runtime.sendMessage({
+          api?.runtime?.sendMessage?.({
             type: 'RECALL_GET_DAILY_SELECTION',
             todayDay: currentToday,
           }).then((res) => {
@@ -243,21 +254,21 @@ export default function NewTabDashboard() {
         setReduceMotion(Boolean(changes.recall_reduce_motion.newValue));
       }
     };
-    chrome.storage?.onChanged?.addListener(onStorageChange);
+    api?.storage?.onChanged?.addListener?.(onStorageChange);
 
     // Sync progress listener
     const onRuntimeMessage = (msg) => {
       if (msg?.type !== 'RECALL_SYNC_PROGRESS') return;
       setSync((s) => (s.status === 'running' ? { ...s, progress: msg } : s));
     };
-    chrome.runtime?.onMessage?.addListener(onRuntimeMessage);
+    api?.runtime?.onMessage?.addListener?.(onRuntimeMessage);
 
     return () => {
       window.removeEventListener('focus', onFocus);
-      chrome.storage?.onChanged?.removeListener(onStorageChange);
-      chrome.runtime?.onMessage?.removeListener(onRuntimeMessage);
+      api?.storage?.onChanged?.removeListener?.(onStorageChange);
+      api?.runtime?.onMessage?.removeListener?.(onRuntimeMessage);
     };
-  }, []);
+  }, [api, storageLocal, loadData]);
 
   // Sync action (reusing popup mechanism)
   const triggerSync = async () => {
@@ -266,7 +277,7 @@ export default function NewTabDashboard() {
     setSyncFeedback(null);
 
     try {
-      const tabs = await chrome.tabs.query({ url: 'https://leetcode.com/*' });
+      const tabs = await (api?.tabs?.query ? api.tabs.query({ url: 'https://leetcode.com/*' }) : Promise.resolve([]));
       const tab = tabs.find((t) => typeof t.id === 'number');
       if (!tab) {
         setSync({ status: 'error', message: 'Open leetcode.com in a tab first, then retry.' });
@@ -274,7 +285,7 @@ export default function NewTabDashboard() {
         return;
       }
 
-      const res = await chrome.tabs.sendMessage(tab.id, { type: 'RECALL_SYNC_HISTORY' });
+      const res = await (api?.tabs?.sendMessage ? api.tabs.sendMessage(tab.id, { type: 'RECALL_SYNC_HISTORY' }) : Promise.reject());
       if (res?.status !== 'complete' && res?.status !== 'partial') {
         setSync({ status: 'error', message: res?.message ?? 'Sync failed. Reload LeetCode and retry.' });
         setSyncFeedback('failure');
@@ -304,7 +315,7 @@ export default function NewTabDashboard() {
     const nextVal = !reduceMotion;
     setReduceMotion(nextVal);
     try {
-      await chrome.storage?.local?.set({ recall_reduce_motion: nextVal });
+      if (storageLocal) { await storageLocal.set({ recall_reduce_motion: nextVal }); }
     } catch (e) {
       console.error('Failed to save reduce-motion setting', e);
     }
@@ -344,7 +355,7 @@ export default function NewTabDashboard() {
     if (!isNew) return;
     setRevisionActivity(nextActivity);
     try {
-      await chrome?.storage?.local?.set({ [REVISION_ACTIVITY_STORAGE_KEY]: nextActivity });
+      if (storageLocal) { await storageLocal.set({ [REVISION_ACTIVITY_STORAGE_KEY]: nextActivity }); }
     } catch (err) {
       console.error('Failed to persist revision activity:', err);
     }

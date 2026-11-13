@@ -4,6 +4,7 @@ import './App.css'
 import { primaryTopic } from './lib/patterns.js'
 import { revisionSessionUrl } from './lib/revisionSession.js'
 import { historySyncState } from './lib/historySync.js'
+import { getBrowserAPI } from './lib/browserApi.js'
 import logo from './assets/logo.png'
 
 // ponytail: set SUPPORT_URL to the real support page before release.
@@ -58,19 +59,20 @@ function App() {
   const [problems, setProblems] = useState(null) // null = still loading
   const [selection, setSelection] = useState([])
   const [sync, setSync] = useState({ status: 'idle' })
+  const api = getBrowserAPI()
 
   useEffect(() => {
     const onMessage = (msg) => {
       if (msg?.type !== 'RECALL_SYNC_PROGRESS') return
       setSync((s) => (s.status === 'running' ? { ...s, progress: msg } : s))
     }
-    chrome.runtime.onMessage.addListener(onMessage)
-    return () => chrome.runtime.onMessage.removeListener(onMessage)
-  }, [])
+    api?.runtime?.onMessage?.addListener(onMessage)
+    return () => api?.runtime?.onMessage?.removeListener(onMessage)
+  }, [api])
 
   useEffect(() => {
     const todayDay = toLocalDay(new Date())
-    chrome.runtime.sendMessage({ type: 'RECALL_MIGRATE_PROBLEMS', todayDay })
+    api?.runtime?.sendMessage({ type: 'RECALL_MIGRATE_PROBLEMS', todayDay })
       .then((response) => {
         if (response?.status === 'ok') {
           setProblems(response.problems)
@@ -90,7 +92,7 @@ function App() {
         setProblems({})
         setSync({ status: 'error', message: 'Could not load stored problems.' })
       })
-  }, [])
+  }, [api])
 
   const focus = useMemo(
     () => selection.map((id) => problems?.[id]).filter(Boolean),
@@ -101,14 +103,14 @@ function App() {
     if (sync.status === 'running') return
     setSync({ status: 'running' })
     try {
-      const tabs = await chrome.tabs.query({ url: 'https://leetcode.com/*' })
+      const tabs = await (api?.tabs?.query ? api.tabs.query({ url: 'https://leetcode.com/*' }) : [])
       const tab = tabs.find((t) => typeof t.id === 'number')
       if (!tab) {
         setSync({ status: 'error', message: 'Open leetcode.com in a tab first, then retry.' })
         return
       }
 
-      const res = await chrome.tabs.sendMessage(tab.id, { type: 'RECALL_SYNC_HISTORY' })
+      const res = await api?.tabs?.sendMessage(tab.id, { type: 'RECALL_SYNC_HISTORY' })
       if (res?.status !== 'complete' && res?.status !== 'partial') {
         setSync({
           status: 'error',

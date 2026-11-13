@@ -5,7 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && vite build --config vite.content.config.js && vite build --config vite.background.config.js",
+    "build:vite": "vite build && vite build --config vite.content.config.js && vite build --config vite.background.config.js",
+    "build": "npm run build:vite && node scripts/build-targets.js",
+    "build:targets": "node scripts/build-targets.js",
+    "build:chromium": "node scripts/build-targets.js chromium",
+    "build:firefox": "node scripts/build-targets.js firefox",
+    "build:safari": "node scripts/build-targets.js safari",
     "test": "node --test \"src/lib/*.test.js\"",
     "lint": "eslint .",
     "preview": "vite preview"
