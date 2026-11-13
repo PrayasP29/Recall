@@ -7,17 +7,14 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  /* Solid dark fallback under everything (backdrop-filter unsupported too). */
-  background: rgba(12, 14, 19, 0.94);
-  border: 1px solid var(--glass-border);
-  border-radius: 14px;
-  box-shadow: var(--glass-shadow);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(125%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(125%);
+  background: var(--bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
   overflow: hidden;
 }
 
-/* Keep all popup content above the glass surface. */
+/* Keep all popup content above the background. */
 .app > * {
   position: relative;
 }
@@ -28,42 +25,40 @@ header {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px;
-  border: 1px solid var(--glass-border);
-  border-radius: 12px;
-  background: var(--glass-weak);
-  box-shadow: var(--glass-shadow);
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  backdrop-filter: blur(var(--glass-blur));
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--header-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 .brand-mark {
   width: 40px;
   height: 40px;
   flex: none;
-  border-radius: 9px;
-  border: 1px solid var(--glass-border);
-  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  object-fit: contain;
 }
 
 .brand-text {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
 h1 {
-  font-size: 34px;
+  font-size: 26px;
   font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.4px;
+  line-height: 1.1;
+  letter-spacing: -0.3px;
   color: var(--text-h);
   margin: 0;
 }
 
 .subtitle {
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 400;
   line-height: 1.25;
   color: var(--text);
@@ -76,19 +71,17 @@ section {
 }
 
 .app > section {
-  padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 11px;
-  background: rgba(18, 20, 27, 0.28);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--card-bg);
 }
 
 h2 {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.06em;
   color: var(--text-h);
   margin: 0;
 }
@@ -105,48 +98,65 @@ h2 {
   padding: 8px 0;
 }
 
-/* History sync — the one deliberate action in the popup, so it gets a solid
-   crimson fill instead of another glass chip. Sync runs only on click. */
+/* History sync — solid crimson fill with clear contrast */
 .sync {
   flex-direction: row;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
-  background: rgba(20, 22, 29, 0.42);
+  gap: 8px;
+  background: var(--header-bg);
 }
 .sync .btn {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  padding: 7px 14px;
-  color: var(--text-h);
-  border-color: var(--glass-border);
+  letter-spacing: 0.03em;
+  padding: 6px 14px;
+  color: #FFFFFF;
+  border: 1px solid var(--accent);
   background: var(--accent-solid);
-  box-shadow: none;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(201, 31, 67, 0.25);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 60ms ease;
 }
 .sync .btn:hover:not(:disabled) {
   background: var(--accent-solid-hover);
-  border-color: var(--accent-border);
+  border-color: var(--accent-solid-hover);
+}
+.sync .btn:active:not(:disabled) {
+  background: var(--accent-press);
+}
+.sync .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 .sync-status {
   font-size: 11px;
   color: var(--text);
+  line-height: 1.3;
 }
 .sync-status.error {
-  color: var(--forgotten);
+  color: var(--accent);
+  font-weight: 500;
 }
 
-/* Queue cards — darkest glass so text is never fighting the image */
+/* Queue cards — light surfaces with restrained borders */
 .card {
-  background: var(--glass-strong);
-  border: 1px solid var(--glass-border);
-  border-radius: 10px;
-  box-shadow: var(--glass-shadow);
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  backdrop-filter: blur(var(--glass-blur));
-  padding: 7px 9px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.card:hover {
+  border-color: #B9B4B1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
 .card-top,
@@ -161,53 +171,63 @@ h2 {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-h);
+  line-height: 1.3;
 }
 
 .diff {
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   border-radius: 4px;
   padding: 1px 6px;
   border: 1px solid currentColor;
 }
 .diff.easy {
   color: var(--solved);
-  background: rgba(74, 222, 128, 0.12);
+  background: var(--solved-bg);
+  border-color: rgba(21, 128, 61, 0.25);
 }
 .diff.medium {
   color: var(--warning);
-  background: rgba(251, 191, 36, 0.12);
+  background: var(--warning-bg);
+  border-color: rgba(180, 83, 9, 0.25);
 }
 .diff.hard {
   color: var(--forgotten);
-  background: rgba(248, 113, 113, 0.12);
+  background: var(--forgotten-bg);
+  border-color: rgba(201, 31, 67, 0.25);
 }
 
 .due {
   font-size: 11px;
+  font-weight: 500;
   color: var(--text);
+  letter-spacing: 0.02em;
 }
 .overdue {
   font-size: 11px;
   font-weight: 600;
-  color: var(--forgotten);
+  color: var(--accent);
 }
 
 .btn {
   font: inherit;
-  font-size: 12px;
-  border-radius: 7px;
-  border: 1px solid var(--glass-border);
-  background: var(--glass-weak);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: #FFFFFF;
   color: var(--text-h);
   padding: 4px 10px;
   cursor: pointer;
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 .btn:hover:not(:disabled) {
-  border-color: var(--accent-border);
-  background: var(--accent-bg);
+  border-color: var(--text-h);
+  background: var(--text-h);
+  color: #FFFFFF;
 }
 .btn:focus-visible {
   outline: 2px solid var(--accent);
@@ -218,18 +238,24 @@ h2 {
   cursor: default;
 }
 .open {
-  font-size: 12px;
-  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-h);
   text-decoration: none;
-  border: 1px solid var(--accent-border);
-  background: var(--glass-weak);
-  border-radius: 7px;
+  border: 1px solid var(--text-h);
+  background: #FFFFFF;
+  border-radius: 6px;
   padding: 3px 10px;
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .open:hover {
-  background: var(--accent-bg);
+  background: var(--text-h);
+  color: #FFFFFF;
 }
 .open:focus-visible {
   outline: 2px solid var(--accent);
@@ -246,17 +272,27 @@ footer {
 .open.support {
   font: inherit;
   font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text);
-  border-color: var(--glass-border);
-  background: var(--glass-weak);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  background: var(--header-bg);
+  border-radius: 6px;
+  padding: 4px 12px;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 .open.support:hover:not(:disabled) {
   color: var(--accent);
+  border-color: var(--accent);
+  background: #FFFFFF;
+}
+.open.support:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .open.support:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: default;
 }
 
@@ -267,37 +303,49 @@ footer {
   justify-content: space-between;
 }
 .day-label {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-h);
 }
 .btn.nav {
   padding: 1px 9px;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.4;
-  background: var(--glass-weak);
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
+}
+.btn.nav:hover:not(:disabled) {
+  border-color: var(--text-h);
+  background: var(--text-h);
+  color: #FFFFFF;
 }
 
 /* Pattern grouping — small muted headings above each topic's cards */
-.topic-group { display: flex; flex-direction: column; gap: 5px; }
-.topic-group + .topic-group { margin-top: 8px; }
+.topic-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.topic-group + .topic-group {
+  margin-top: 8px;
+}
 .topic-heading {
   margin: 0;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text);
-  opacity: 0.85;
+  color: var(--text-h);
 }
-/* Focus pattern: the day's headline, in the accent colour. */
+/* Focus pattern: the day's headline, in the primary dark colour. */
 .topic-heading.focus {
   font-size: 11px;
   color: var(--text-h);
-  opacity: 1;
 }
 /* Overdue/Other: quieter secondary sections. */
 .topic-heading.secondary {
-  opacity: 0.6;
-  font-weight: 500;
+  opacity: 0.65;
+  font-weight: 600;
 }
