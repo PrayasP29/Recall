@@ -73,6 +73,53 @@ export function recordRevision(
 }
 
 /**
+ * Processes an accepted LeetCode submission event for automatic revision tracking.
+ * Confirms the problem is tracked by Recall or belongs to the current daily selection.
+ * If eligible, records the revision using recordRevision() ensuring strict idempotency.
+ * Untracked problems are safely ignored and not added to revisionActivity.
+ *
+ * @param {Object} options
+ * @param {Record<string, unknown>} [options.problems]
+ * @param {Record<string, Array<string>>} [options.dailySelections]
+ * @param {Array<Object>} [options.revisionActivity]
+ * @param {string|number} options.problemId
+ * @param {string} [options.date]
+ * @param {string} [options.timestamp]
+ * @returns {{ nextActivity: Array, isRecorded: boolean, record?: Object, reason?: string }}
+ */
+export function recordAcceptedRevision({
+  problems = {},
+  dailySelections = {},
+  revisionActivity = [],
+  problemId,
+  date = toLocalDay(),
+  timestamp = new Date().toISOString(),
+}) {
+  if (!problemId) {
+    throw new Error('problemId is required');
+  }
+
+  const targetId = String(problemId);
+  const isDailySelection = Boolean(dailySelections?.[date]?.includes(targetId));
+  const isTrackedProblem = Boolean(problems && Object.prototype.hasOwnProperty.call(problems, targetId));
+
+  if (!isTrackedProblem && !isDailySelection) {
+    return {
+      nextActivity: Array.isArray(revisionActivity) ? [...revisionActivity] : [],
+      isRecorded: false,
+      reason: 'untracked',
+    };
+  }
+
+  const result = recordRevision(revisionActivity, targetId, date, timestamp);
+  return {
+    nextActivity: result.nextActivity,
+    isRecorded: result.isNew,
+    record: result.record,
+  };
+}
+
+/**
  * Calculates the number of distinct tracked problems marked as revised at least once.
  * Re-revising the same problem multiple times does not inflate this count.
  *

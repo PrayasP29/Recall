@@ -9,7 +9,9 @@
 //   3. Disarm after the first final verdict — repeated mutations for the
 //      same submission are ignored, and a re-solve re-arms via a new click.
 import {
-  classifyVerdict,
+  findVerdictInRecords,
+  isSubmitElement,
+  isSubmitShortcut,
   slugFromPathname,
   titleFromDocumentTitle,
 } from './lib/tracker.js'
@@ -30,54 +32,39 @@ import {
   shouldOfferRecovery,
 } from './lib/revisionRecovery.js'
 
-const ARM_WINDOW_MS = 30_000 // verdict usually lands within seconds; contests queue
+const ARM_WINDOW_MS = 60_000 // verdict usually lands within seconds; queue may take up to 60s
 
 let armed = null // { slug, until } | null
+let lastRecordedAccepted = { slug: null, timestamp: 0 }
 
 function arm() {
   const slug = slugFromPathname(window.location.pathname)
   if (!slug) return
   armed = { slug, until: Date.now() + ARM_WINDOW_MS }
+  console.info('[Recall content] armed for submission on', slug)
 }
 
+// 1. Arm on click of Submit button (handles SVG, icon, text, and data-attribute children)
 document.addEventListener(
   'click',
   (e) => {
-    let el = e.target
-    for (let i = 0; el && i < 3; i++, el = el.parentElement) {
-      if (el.tagName === 'BUTTON' && el.textContent.trim().toLowerCase() === 'submit') {
-        arm()
-        return
-      }
+    if (isSubmitElement(e.target)) {
+      arm()
     }
   },
   true,
 )
 
-// Exact verdict text among nodes that were just added or changed.
-function findVerdict(records) {
-  for (const rec of records) {
-    if (rec.type === 'characterData') {
-      const v = classifyVerdict(rec.target.textContent)
-      if (v) return v
-      continue
+// 2. Arm on keyboard submission shortcut (Ctrl+Enter or Cmd+Enter)
+window.addEventListener(
+  'keydown',
+  (e) => {
+    if (isSubmitShortcut(e)) {
+      arm()
     }
-    for (const node of rec.addedNodes) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        const v = classifyVerdict(node.textContent)
-        if (v) return v
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
-        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
-        let t
-        while ((t = walker.nextNode())) {
-          const v = classifyVerdict(t.textContent)
-          if (v) return v
-        }
-      }
-    }
-  }
-  return null
-}
+  },
+  true,
+)
 
 // Best-effort metadata; any miss falls back to null / document.title.
 function pageMeta() {
@@ -592,11 +579,21 @@ new MutationObserver((records) => {
     armed = null
     return
   }
-  const verdict = findVerdict(records)
+  const verdict = findVerdictInRecords(records)
   if (!verdict) return
   const slug = armed.slug
   armed = null // disarm: one final verdict per Submit; repeats ignored
-  if (verdict === 'accepted') recordAccepted(slug)
+
+  if (verdict === 'accepted') {
+    // Content-script level idempotency & debouncing (prevent rapid duplicate records)
+    const now = Date.now()
+    if (lastRecordedAccepted.slug === slug && now - lastRecordedAccepted.timestamp < 3000) {
+      console.info('[Recall content] ignoring duplicate accepted event within debounce window', slug)
+      return
+    }
+    lastRecordedAccepted = { slug, timestamp: now }
+    recordAccepted(slug)
+  }
 }).observe(document.documentElement, { childList: true, subtree: true, characterData: true })
 
 // --- History sync ---------------------------------------------------------
