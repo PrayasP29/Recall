@@ -236,10 +236,8 @@ test('isProblemRevisedOnDate correctly detects revised state', () => {
   assert.equal(isProblemRevisedOnDate(activity, '3sum', '2026-04-10'), false);
 });
 
-// ============================================================================
-// AUTOMATIC LEETCODE REVISION TRACKING REGRESSION SUITE (SCENARIOS 1-12)
-// ============================================================================
-
+// =====================================================================// AUTOMATIC LEETCODE REVISION TRACKING REGRESSION SUITE (SCENARIOS 1-12)
+// =====================================================================
 test('Scenario 1: Accepted submission records a revision automatically', () => {
   const problems = { 'two-sum': { problemId: 'two-sum', title: 'Two Sum' } };
   const dailySelections = { '2026-04-10': ['two-sum', 'valid-anagram'] };

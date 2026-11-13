@@ -261,7 +261,6 @@ api?.runtime?.onMessage?.addListener((msg, sender, sendResponse) => {
         date: todayDay,
         timestamp: event.at,
       })
-
       await saveState(next, state.dailySelections, nextActivity)
       return { problems: next, revisionActivity: nextActivity }
     })
